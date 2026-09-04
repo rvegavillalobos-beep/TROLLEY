@@ -46,7 +46,8 @@ for idx, w in enumerate(weeks):
     uph_capacity.append(calculated_uph)
 
 # 3. Weekly Production Data Converted to UPH (45 hrs/week: 5 days * 9 hours)
-raw_production_up_to_cw8 = [49, 69, 123, 147, 184, 196, 0, 0, 176, 199, 223, 246, 206, 280, 325]
+# Updated raw production matching the exact visual sequence for CW46 to CW8 + blanks for future weeks
+raw_production_up_to_cw8 = [49, 69, 123, 147, 184, 196, 0, 0, 176, 199, 223, 246, 206, 270, 281]
 production_uph_demand = [round(p / 45.0, 1) if p > 0 else 0.0 for p in raw_production_up_to_cw8]
 
 while len(production_uph_demand) < n_weeks:
@@ -97,16 +98,16 @@ prod_line_color = '#27AE60'  # Green line for production UPH demand
 ax_uph = ax1.twinx()
 
 # Line 1: Available Line Capacity (UPH)
-ax_uph.plot(x, df["UPH_Capacity"], color=coral_color, marker='o', linewidth=2.0, markersize=4.5, label='Troley Capacity (UPH)')
+ax_uph.plot(x, df["UPH_Capacity"], color=coral_color, marker='o', linewidth=2.0, markersize=4.5, label='Line Capacity Available (UPH)')
 
-# Annotate UPH values tightly below each point on the orange line (restored)
+# Annotate UPH values tightly below each point on the orange line
 for i, uph in enumerate(df["UPH_Capacity"]):
     ax_uph.text(i, uph - 0.8, f"{uph}", ha='center', va='top', fontsize=6.5, fontweight='bold', color=coral_color)
 
-# Line 2: Production UPH Demand (up to CW8)
+# Line 2: Production UPH Demand (up to CW8) with corrected sequence values
 ax_uph.plot(x, df["Prod_UPH_Demand"], color=prod_line_color, marker='s', linewidth=2.2, markersize=5, label='Production Demand (UPH, up to CW8)')
 
-ax_uph.set_ylabel('Trolley Capacity & Demand (UPH)', fontsize=11, fontweight='bold', color=coral_color)
+ax_uph.set_ylabel('Line Capacity & Demand (UPH)', fontsize=11, fontweight='bold', color=coral_color)
 ax_uph.tick_params(axis='y', labelcolor=coral_color)
 ax_uph.set_ylim(0, 35)
 ax_uph.spines['top'].set_visible(False)
@@ -160,8 +161,8 @@ col1, col2, col3, col4 = st.columns(4)
 with col1:
     st.metric(label="Base Fleet", value="35 Units (11.7 UPH)")
 with col2:
-    st.metric(label="Peak Production (CW8)", value="325 Units (7.2 UPH)")
+    st.metric(label="Peak Production (CW8)", value="281 Units (6.2 UPH)")
 with col3:
     st.metric(label="Available Capacity at CW8", value="16.3 UPH")
 with col4:
-    st.metric(label="Capacity Margin", value="Clear Superiority (+9.1 UPH)")
+    st.metric(label="Capacity Margin", value="Clear Superiority (+10.1 UPH)")
