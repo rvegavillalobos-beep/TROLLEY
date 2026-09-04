@@ -73,13 +73,9 @@ ax1.spines['left'].set_color('#BFBFBF')
 ax1.spines['bottom'].set_color('#BFBFBF')
 ax1.grid(axis='y', linestyle='--', alpha=0.4)
 
-# Set Y-axis limits up to 94 to comfortably display the 90 limit line and top text
-ax1.set_ylim(0, 94)
-ax1.set_yticks([0, 20, 40, 60, 80, 90])
-
-# Add a dashed horizontal reference line for the final target of 90 trolleys
-ax1.axhline(y=90, color='#1F4E79', linestyle=':', linewidth=1.2, alpha=0.7)
-ax1.text(n_weeks - 0.5, 91, 'Target Fleet: 90 Units', ha='right', va='bottom', fontsize=7.5, fontweight='bold', color='#1F4E79')
+# Set Y-axis scale from 0 to 95 with 10-by-10 ticks to cleanly display 90 on the axis
+ax1.set_ylim(0, 96)
+ax1.set_yticks(range(0, 91, 10))
 
 # Annotate trolley numbers on top of bars
 for i, v in enumerate(df["Operational"]):
@@ -87,7 +83,6 @@ for i, v in enumerate(df["Operational"]):
 
 
 # --- TOP CHART: SECONDARY AXIS (UPH CAPACITY LINE) ---
-# Using the requested Coral color #FF9E8A (with a slightly deeper shade for sharp text/line legibility: #D96852)
 coral_color = '#D96852'
 
 ax_uph = ax1.twinx()
