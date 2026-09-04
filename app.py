@@ -126,8 +126,8 @@ ax1.legend(lines_1 + lines_2, labels_1 + labels_2, frameon=False, loc='upper lef
 
 
 # --- BOTTOM TRACKER: TIMELINE MILESTONES (Batch and Customs only) ---
-# Add "Additional Shipments" label on the Y-axis of the bottom timeline track matching the image style
-ax2.set_ylabel('Additional\nShipments', fontsize=10, fontweight='bold', color='#1F4E79', rotation=0, labelpad=40, va='center')
+# Rotated vertical label for Additional Shipments (rotation=90) to match the provided layout reference exactly
+ax2.set_ylabel('Additional Shipments', fontsize=10, fontweight='bold', color='#1F4E79', rotation=90, labelpad=20, va='center')
 
 # Row 1: Batch 1
 ax2.barh(y=1, width=4, left=1, height=0.5, color='#FFF2CC', edgecolor='#D6B656', hatch='//')
