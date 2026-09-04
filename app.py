@@ -89,9 +89,9 @@ ax_uph.spines['left'].set_visible(False)
 ax_uph.spines['right'].set_color('#C00000')
 ax_uph.grid(False)
 
-# Annotate small UPH values directly above each point on the line
+# Annotate small UPH values directly BELOW each point on the line (with smaller font size 6.5)
 for i, uph in enumerate(df["UPH"]):
-    ax_uph.text(i, uph + 1.2, f"{uph}", ha='center', va='bottom', fontsize=7, fontweight='bold', color='#C00000')
+    ax_uph.text(i, uph - 2.2, f"{uph}", ha='center', va='top', fontsize=6.5, fontweight='bold', color='#C00000')
 
 # Combine legends from both axes cleanly on top left
 lines_1, labels_1 = ax1.get_legend_handles_labels()
