@@ -6,7 +6,7 @@ import numpy as np
 st.set_page_config(page_title="Trolley Availability & Line Capacity Ramp-Up", layout="wide")
 
 st.title("📦 Trolley Availability & Production Line Capacity Comparison")
-st.markdown("Operational readiness and line UPH capability constrained by a mechanical adjustment rate of **2 units/week** (Paused during CW52 & CW1 Shutdown; Target: 90 trolleys for 30 UPH).")
+st.markdown("Operational readiness and line UPH capability constrained by a mechanical adjustment rate of **2 units/week** (Paused during CWF52 & CW1 Shutdown; Target: 90 trolleys for 30 UPH).")
 
 # 1. Timeline Setup: Extended to CW13
 weeks = [f"CW{i}" for i in range(46, 53)] + [f"CW{i}" for i in range(1, 14)]
@@ -18,7 +18,7 @@ b1 = 24    # Batch 1 arrives at CW1
 b2 = 30    # Batch 2 arrives at CW8
 
 current_physical = base
-current_operational = base
+current_operational = baseF
 adjustment_rate = 2
 
 phys_stock = []
@@ -98,7 +98,7 @@ prod_line_color = '#27AE60'  # Green line for production UPH demand
 ax_uph = ax1.twinx()
 
 # Line 1: Available Line Capacity (UPH)
-ax_uph.plot(x, df["UPH_Capacity"], color=coral_color, marker='o', linewidth=2.0, markersize=4.5, label='Line Capacity Available (UPH)')
+ax_uph.plot(x, df["UPH_Capacity"], color=coral_color, marker='o', linewidth=2.0, markersize=4.5, label='Troley Capacity (UPH)')
 
 # Annotate UPH values tightly below each point on the orange line
 for i, uph in enumerate(df["UPH_Capacity"]):
@@ -107,7 +107,7 @@ for i, uph in enumerate(df["UPH_Capacity"]):
 # Line 2: Production UPH Demand (up to CW8) with corrected sequence values
 ax_uph.plot(x, df["Prod_UPH_Demand"], color=prod_line_color, marker='s', linewidth=2.2, markersize=5, label='Production Demand (UPH, up to CW8)')
 
-ax_uph.set_ylabel('Line Capacity & Demand (UPH)', fontsize=11, fontweight='bold', color=coral_color)
+ax_uph.set_ylabel('Trolley Capacity & Demand (UPH)', fontsize=11, fontweight='bold', color=coral_color)
 ax_uph.tick_params(axis='y', labelcolor=coral_color)
 ax_uph.set_ylim(0, 35)
 ax_uph.spines['top'].set_visible(False)
