@@ -5,8 +5,8 @@ import numpy as np
 
 st.set_page_config(page_title="Trolley Availability & Line Capacity Ramp-Up", layout="wide")
 
-st.title("📦 Trolley Availability & Production Line Capacity Comparison")
-st.markdown("Operational readiness and line UPH capability constrained by a mechanical adjustment rate of **2 units/week** (Paused during CWF52 & CW1 Shutdown; Target: 90 trolleys for 30 UPH).")
+st.title("📦 Trolley Availability & Trolley Capacity vs. Production Demand")
+st.markdown("Operational readiness and trolley-based capacity constrained by a mechanical adjustment rate of **2 units/week** (Paused during CW52 & CW1 Shutdown; Target: 90 trolleys for 30 UPH equivalent).")
 
 # 1. Timeline Setup: Extended to CW13
 weeks = [f"CW{i}" for i in range(46, 53)] + [f"CW{i}" for i in range(1, 14)]
@@ -18,7 +18,7 @@ b1 = 24    # Batch 1 arrives at CW1
 b2 = 30    # Batch 2 arrives at CW8
 
 current_physical = base
-current_operational = baseF
+current_operational = base
 adjustment_rate = 2
 
 phys_stock = []
@@ -46,7 +46,6 @@ for idx, w in enumerate(weeks):
     uph_capacity.append(calculated_uph)
 
 # 3. Weekly Production Data Converted to UPH (45 hrs/week: 5 days * 9 hours)
-# Updated raw production matching the exact visual sequence for CW46 to CW8 + blanks for future weeks
 raw_production_up_to_cw8 = [49, 69, 123, 147, 184, 196, 0, 0, 176, 199, 223, 246, 206, 270, 281]
 production_uph_demand = [round(p / 45.0, 1) if p > 0 else 0.0 for p in raw_production_up_to_cw8]
 
@@ -72,8 +71,8 @@ ax1.bar(x, df["Operational"], width, label='Operational Available Trolleys', col
 ax1.bar(x, df["Physical"] - df["Operational"], width, bottom=df["Operational"], 
         label='Pending Adjustment', color='#D9E1F2', alpha=0.8)
 
-ax1.set_ylabel('Available Trolley', fontsize=11, fontweight='bold', color='#1F4E79')
-ax1.set_title('Trolley Availability & Line Capacity vs. Production UPH Demand (Up to CW8)', fontsize=13, fontweight='bold', pad=15, color='#1F4E79')
+ax1.set_ylabel('Available Trolleys', fontsize=11, fontweight='bold', color='#1F4E79')
+ax1.set_title('Trolley Availability & Trolley Capacity vs. Production Demand (Up to CW8)', fontsize=13, fontweight='bold', pad=15, color='#1F4E79')
 ax1.set_xticks(x)
 ax1.set_xticklabels(weeks, rotation=45, ha='right', fontsize=9)
 
@@ -91,21 +90,21 @@ for i, v in enumerate(df["Operational"]):
     ax1.text(i, v + 0.8, str(v), ha='center', va='bottom', fontsize=7.5, fontweight='semibold', color='#333333')
 
 
-# --- TOP CHART: SECONDARY AXIS (UPH CAPACITY LINE & PRODUCTION UPH LINE) ---
+# --- TOP CHART: SECONDARY AXIS (TROLLEY CAPACITY LINE & PRODUCTION DEMAND LINE) ---
 coral_color = '#D96852'
 prod_line_color = '#27AE60'  # Green line for production UPH demand
 
 ax_uph = ax1.twinx()
 
-# Line 1: Available Line Capacity (UPH)
-ax_uph.plot(x, df["UPH_Capacity"], color=coral_color, marker='o', linewidth=2.0, markersize=4.5, label='Troley Capacity (UPH)')
+# Line 1: Trolley-Based Capacity (UPH)
+ax_uph.plot(x, df["UPH_Capacity"], color=coral_color, marker='o', linewidth=2.0, markersize=4.5, label='Trolley-Based Capacity (UPH)')
 
 # Annotate UPH values tightly below each point on the orange line
 for i, uph in enumerate(df["UPH_Capacity"]):
     ax_uph.text(i, uph - 0.8, f"{uph}", ha='center', va='top', fontsize=6.5, fontweight='bold', color=coral_color)
 
-# Line 2: Production UPH Demand (up to CW8) with corrected sequence values
-ax_uph.plot(x, df["Prod_UPH_Demand"], color=prod_line_color, marker='s', linewidth=2.2, markersize=5, label='Production Demand (UPH, up to CW8)')
+# Line 2: Production Demand (UPH)
+ax_uph.plot(x, df["Prod_UPH_Demand"], color=prod_line_color, marker='s', linewidth=2.2, markersize=5, label='Production Demand (UPH)')
 
 ax_uph.set_ylabel('Trolley Capacity & Demand (UPH)', fontsize=11, fontweight='bold', color=coral_color)
 ax_uph.tick_params(axis='y', labelcolor=coral_color)
@@ -163,6 +162,6 @@ with col1:
 with col2:
     st.metric(label="Peak Production (CW8)", value="281 Units (6.2 UPH)")
 with col3:
-    st.metric(label="Available Capacity at CW8", value="16.3 UPH")
+    st.metric(label="Trolley Capacity at CW8", value="16.3 UPH")
 with col4:
     st.metric(label="Capacity Margin", value="Clear Superiority (+10.1 UPH)")
