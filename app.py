@@ -63,7 +63,7 @@ ax1.bar(x, df["Physical"] - df["Operational"], width, bottom=df["Operational"],
         label='Pending Adjustment', color='#D9E1F2', alpha=0.8)
 
 ax1.set_ylabel('Available Trolley', fontsize=11, fontweight='bold', color='#1F4E79')
-ax1.set_title('Trolley Availability & Line Capacity Ramp-Up (Adjustment Rate: 2 units/week)', fontsize=13, fontweight='bold', pad=15, color='#1F4E79')
+ax1.set_title('Trolley Availability & Line Capacity Ramp-Up (Rate: 2 units/week)', fontsize=13, fontweight='bold', pad=15, color='#1F4E79')
 ax1.set_xticks(x)
 ax1.set_xticklabels(weeks, rotation=45, ha='right', fontsize=9)
 
@@ -106,6 +106,10 @@ ax1.legend(lines_1 + lines_2, labels_1 + labels_2, frameon=False, loc='upper lef
 
 
 # --- BOTTOM TRACKER: TIMELINE MILESTONES ---
+# Strategic Window for Additional Orders (Placed in the previously empty red-circled space: CW46 - CW50)
+ax2.barh(y=0, width=5, left=0, height=0.5, color='#F2F2F2', edgecolor='#A6A6A6', linestyle='--', hatch='..')
+ax2.text(2.5, 0, 'STRATEGIC WINDOW: Potential Batch 3 PO', ha='center', va='center', fontsize=7, fontweight='bold', color='#595959')
+
 # Row 1: Batch 1
 ax2.barh(y=1, width=4, left=1, height=0.5, color='#FFF2CC', edgecolor='#D6B656', hatch='//')
 ax2.text(3, 1, 'BATCH 1 Shipment +24', ha='center', va='center', fontsize=7.5, fontweight='bold', color='#7F6000')
@@ -113,17 +117,17 @@ ax2.text(3, 1, 'BATCH 1 Shipment +24', ha='center', va='center', fontsize=7.5, f
 ax2.barh(y=1, width=2, left=5, height=0.5, color='#FFE599', edgecolor='#D6B656')
 ax2.text(6, 1, 'CUSTOMS', ha='center', va='center', fontsize=7, fontweight='bold', color='#7F6000')
 
-# Row 2: Batch 2
-ax2.barh(y=0, width=4, left=8, height=0.5, color='#FFF2CC', edgecolor='#D6B656', hatch='//')
-ax2.text(10, 0, 'BATCH 2 Shipment +30', ha='center', va='center', fontsize=7.5, fontweight='bold', color='#7F6000')
+# Row 2 (Shifted/Shared for Batch 2): Batch 2
+ax2.barh(y=1.5, width=4, left=8, height=0.5, color='#FFF2CC', edgecolor='#D6B656', hatch='//')
+ax2.text(10, 1.5, 'BATCH 2 Shipment +30', ha='center', va='center', fontsize=7.5, fontweight='bold', color='#7F6000')
 
-ax2.barh(y=0, width=2, left=12, height=0.5, color='#FFE599', edgecolor='#D6B656')
-ax2.text(13, 0, 'CUSTOMS', ha='center', va='center', fontsize=7, fontweight='bold', color='#7F6000')
+ax2.barh(y=1.5, width=2, left=12, height=0.5, color='#FFE599', edgecolor='#D6B656')
+ax2.text(13, 1.5, 'CUSTOMS', ha='center', va='center', fontsize=7, fontweight='bold', color='#7F6000')
 
 # Styling bottom timeline tracker
 ax2.set_yticks([])
 ax2.set_xlim(-0.5, n_weeks - 0.5)
-ax2.set_ylim(-0.5, 1.5)
+ax2.set_ylim(-0.5, 2.0)
 ax2.spines['top'].set_visible(False)
 ax2.spines['right'].set_visible(False)
 ax2.spines['left'].set_visible(False)
