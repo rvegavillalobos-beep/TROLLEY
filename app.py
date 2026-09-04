@@ -8,8 +8,8 @@ st.set_page_config(page_title="Trolley Availability & Line Capacity Ramp-Up", la
 st.title("📦 Trolley Availability & Production Capacity Ramp-Up")
 st.markdown("Operational readiness and line UPH capability constrained by a mechanical adjustment rate of **2 units/week** (Target: 90 trolleys for 30 UPH).")
 
-# 1. Timeline Setup: Extended to CW22 of next year so the line capacity reaches/surpasses 20 UPH
-weeks = [f"CW{i}" for i in range(46, 53)] + [f"CW{i}" for i in range(1, 23)]
+# 1. Timeline Setup: Extended to CW15 of next year (reaching 20 UPH)
+weeks = [f"CW{i}" for i in range(46, 53)] + [f"CW{i}" for i in range(1, 16)]
 n_weeks = len(weeks)
 
 # 2. Simulation Logic
@@ -35,7 +35,7 @@ for idx, w in enumerate(weeks):
         
     phys_stock.append(current_physical)
     
-    # Continue adjusting by 2 units per week until reaching max physical capacity (84 units)
+    # Continue adjusting by 2 units per week up to operational limits
     if current_operational < current_physical:
         current_operational = min(current_physical, current_operational + adjustment_rate)
     op_stock.append(current_operational)
@@ -52,7 +52,7 @@ df = pd.DataFrame({
 })
 
 # 3. Professional Matplotlib Figure with Dual Axes (Bars for Trolleys, Line for UPH)
-fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(15, 6.5), gridspec_kw={'height_ratios': [3, 0.7], 'hspace': 0.05}, sharex=True)
+fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(14, 6.5), gridspec_kw={'height_ratios': [3, 0.7], 'hspace': 0.05}, sharex=True)
 
 x = np.arange(n_weeks)
 width = 0.65
@@ -80,8 +80,8 @@ for i, v in enumerate(df["Operational"]):
 
 
 # --- TOP CHART: SECONDARY AXIS (UPH CAPACITY LINE) ---
-# Using the requested Coral color #FF9E8A (adjusted slightly darker for text/line legibility if needed, or exact hex)
-coral_color = '#E66A53' # Professional tone aligned with #FF9E8A for contrast on white background
+# Using the requested Coral color #FF9E8A (with a slightly deeper shade for sharp text/line legibility: #D96852)
+coral_color = '#D96852'
 
 ax_uph = ax1.twinx()
 ax_uph.plot(x, df["UPH"], color=coral_color, marker='o', linewidth=2.2, markersize=4.5, label='Line Capacity (UPH)')
