@@ -8,8 +8,8 @@ st.set_page_config(page_title="Trolley Availability & Line Capacity Ramp-Up", la
 st.title("📦 Trolley Availability & Production Capacity Ramp-Up")
 st.markdown("Operational readiness and line UPH capability constrained by a mechanical adjustment rate of **2 units/week** (Target: 90 trolleys for 30 UPH).")
 
-# 1. Timeline Setup (CW46 to CW13 of next year)
-weeks = [f"CW{i}" for i in range(46, 53)] + [f"CW{i}" for i in range(1, 14)]
+# 1. Timeline Setup: Extended to CW22 of next year so the line capacity reaches/surpasses 20 UPH
+weeks = [f"CW{i}" for i in range(46, 53)] + [f"CW{i}" for i in range(1, 23)]
 n_weeks = len(weeks)
 
 # 2. Simulation Logic
@@ -35,6 +35,7 @@ for idx, w in enumerate(weeks):
         
     phys_stock.append(current_physical)
     
+    # Continue adjusting by 2 units per week until reaching max physical capacity (84 units)
     if current_operational < current_physical:
         current_operational = min(current_physical, current_operational + adjustment_rate)
     op_stock.append(current_operational)
@@ -51,7 +52,7 @@ df = pd.DataFrame({
 })
 
 # 3. Professional Matplotlib Figure with Dual Axes (Bars for Trolleys, Line for UPH)
-fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(14, 6.5), gridspec_kw={'height_ratios': [3, 0.7], 'hspace': 0.05}, sharex=True)
+fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(15, 6.5), gridspec_kw={'height_ratios': [3, 0.7], 'hspace': 0.05}, sharex=True)
 
 x = np.arange(n_weeks)
 width = 0.65
@@ -75,26 +76,26 @@ ax1.set_ylim(0, max(df["Physical"]) + 10)
 
 # Annotate trolley numbers on top of bars
 for i, v in enumerate(df["Operational"]):
-    ax1.text(i, v + 0.8, str(v), ha='center', va='bottom', fontsize=8, fontweight='semibold', color='#333333')
+    ax1.text(i, v + 0.8, str(v), ha='center', va='bottom', fontsize=7.5, fontweight='semibold', color='#333333')
 
 
 # --- TOP CHART: SECONDARY AXIS (UPH CAPACITY LINE) ---
-# Using a professional Deep Teal (#0F766E) that harmonizes with Navy Blue & Slate
-uph_color = '#0F766E'
+# Using the requested Coral color #FF9E8A (adjusted slightly darker for text/line legibility if needed, or exact hex)
+coral_color = '#E66A53' # Professional tone aligned with #FF9E8A for contrast on white background
 
 ax_uph = ax1.twinx()
-ax_uph.plot(x, df["UPH"], color=uph_color, marker='o', linewidth=2.0, markersize=4.5, label='Line Capacity (UPH)')
-ax_uph.set_ylabel('Line Capacity (UPH)', fontsize=11, fontweight='bold', color=uph_color)
-ax_uph.tick_params(axis='y', labelcolor=uph_color)
+ax_uph.plot(x, df["UPH"], color=coral_color, marker='o', linewidth=2.2, markersize=4.5, label='Line Capacity (UPH)')
+ax_uph.set_ylabel('Line Capacity (UPH)', fontsize=11, fontweight='bold', color=coral_color)
+ax_uph.tick_params(axis='y', labelcolor=coral_color)
 ax_uph.set_ylim(0, 35)
 ax_uph.spines['top'].set_visible(False)
 ax_uph.spines['left'].set_visible(False)
-ax_uph.spines['right'].set_color(uph_color)
+ax_uph.spines['right'].set_color(coral_color)
 ax_uph.grid(False)
 
-# Annotate UPH values tightly below each point on the line (smaller font, minimal offset)
+# Annotate UPH values tightly below each point on the line
 for i, uph in enumerate(df["UPH"]):
-    ax_uph.text(i, uph - 0.8, f"{uph}", ha='center', va='top', fontsize=6.5, fontweight='bold', color=uph_color)
+    ax_uph.text(i, uph - 0.8, f"{uph}", ha='center', va='top', fontsize=6.5, fontweight='bold', color=coral_color)
 
 # Combine legends from both axes cleanly on top left
 lines_1, labels_1 = ax1.get_legend_handles_labels()
@@ -119,6 +120,7 @@ ax2.text(13, 0, 'CUSTOMS', ha='center', va='center', fontsize=7, fontweight='bol
 
 # Styling bottom timeline tracker
 ax2.set_yticks([])
+ax2.set_xlim(-0.5, n_weeks - 0.5)
 ax2.set_ylim(-0.5, 1.5)
 ax2.spines['top'].set_visible(False)
 ax2.spines['right'].set_visible(False)
@@ -141,4 +143,3 @@ with col3:
     st.metric(label="Adjustment Bottleneck", value="2 Units / Week")
 with col4:
     st.metric(label="Target Line Capacity", value="90 Units (30.0 UPH)")
-    
