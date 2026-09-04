@@ -6,16 +6,16 @@ import numpy as np
 st.set_page_config(page_title="Trolley Availability & Line Capacity Ramp-Up", layout="wide")
 
 st.title("📦 Trolley Availability & Production Line Capacity Comparison")
-st.markdown("Operational readiness and line UPH capability constrained by a mechanical adjustment rate of **2 units/week** (Target: 90 trolleys for 30 UPH).")
+st.markdown("Operational readiness and line UPH capability constrained by a mechanical adjustment rate of **2 units/week** (Paused during CW52 & CW1 Shutdown; Target: 90 trolleys for 30 UPH).")
 
-# 1. Timeline Setup: Extended to CW13 as requested
+# 1. Timeline Setup: Extended to CW13
 weeks = [f"CW{i}" for i in range(46, 53)] + [f"CW{i}" for i in range(1, 14)]
 n_weeks = len(weeks)
 
 # 2. Simulation Logic for Trolleys & UPH Capacity
 base = 35  # Base fleet availability
-b1 = 24    # Batch 1
-b2 = 30    # Batch 2
+b1 = 24    # Batch 1 arrives at CW1
+b2 = 30    # Batch 2 arrives at CW8
 
 current_physical = base
 current_operational = base
@@ -26,31 +26,36 @@ op_stock = []
 uph_capacity = []
 
 for idx, w in enumerate(weeks):
-    if idx == 7:  # Starting CW1
+    # Batch 1 arrives at CW1 (which is index 7 in this weeks list)
+    if idx == 7:  
         current_physical += b1
-    if idx == 14: # Starting CW8
+    # Batch 2 arrives at CW8 (which is index 14 in this weeks list)
+    if idx == 14: 
         current_physical += b2
         
     phys_stock.append(current_physical)
     
-    if current_operational < current_physical:
+    # Mechanical adjustment logic: 2 units/week, but PAUSED during Shutdown (CW52 at index 6, and CW1 at index 7)
+    # Note: At index 7 (CW1), Batch 1 arrives AND shutdown occurs, so mechanical adjustment is paused for that week.
+    is_shutdown = (weeks[idx] in ["CW52", "CW1"])
+    
+    if not is_shutdown and current_operational < current_physical:
         current_operational = min(current_physical, current_operational + adjustment_rate)
+        
     op_stock.append(current_operational)
     
     # Calculate available line UPH capacity based on ratio: 90 trolleys = 30 UPH
     calculated_uph = round((current_operational / 90.0) * 30, 1)
     uph_capacity.append(calculated_uph)
 
-# 3. Weekly Production Data from Image (CW46 to CW8, with 0 for shutdown CW52/CW1, and NaN/None for CW9-CW13)
-# Operating hours: 5 days * 9 hours/day = 45 hours/week
-# UPH Demand = Weekly Production Units / 45 hours
+# 3. Weekly Production Data from Image (CW46 to CW8 converted to UPH via 45 hrs/week)
+# Weeks: CW46, CW47, CW48, CW49, CW50, CW51, CW52, CW1, CW2, CW3, CW4, CW5, CW6, CW7, CW8
 raw_production_up_to_cw8 = [49, 69, 123, 147, 184, 196, 0, 0, 176, 199, 223, 246, 206, 280, 325]
 production_uph_demand = [round(p / 45.0, 1) if p > 0 else 0.0 for p in raw_production_up_to_cw8]
 
 # Extend to match n_weeks (CW46 to CW13), filling CW9-CW13 with None since data is only up to CW8
 while len(production_uph_demand) < n_weeks:
     production_uph_demand.append(None)
-    raw_production_up_to_cw8.append(None)
 
 df = pd.DataFrame({
     "Week": weeks,
@@ -97,7 +102,7 @@ prod_line_color = '#27AE60'  # Green line for production UPH demand
 ax_uph = ax1.twinx()
 
 # Line 1: Available Line Capacity (UPH)
-ax_uph.plot(x, df["UPH_Capacity"], color=coral_color, marker='o', linewidth=2.0, markersize=4.5, label='Troley Capacity (UPH)')
+ax_uph.plot(x, df["UPH_Capacity"], color=coral_color, marker='o', linewidth=2.0, markersize=4.5, label='Line Capacity Available (UPH)')
 
 # Line 2: Production UPH Demand (up to CW8)
 ax_uph.plot(x, df["Prod_UPH_Demand"], color=prod_line_color, marker='s', linewidth=2.2, markersize=5, label='Production Demand (UPH, up to CW8)')
@@ -122,6 +127,10 @@ ax1.legend(lines_1 + lines_2, labels_1 + labels_2, frameon=False, loc='upper lef
 
 
 # --- BOTTOM TRACKER: TIMELINE MILESTONES ---
+# Shutdown block spanning CW52 and CW1
+ax2.axvspan(6 - 0.5, 7 + 0.5, color='#D9D9D9', alpha=0.6)
+ax2.text(6.5, 0.75, 'SHUTDOWN', ha='center', va='center', fontsize=7.5, fontweight='bold', color='#595959', rotation=0)
+
 # Row 1: Batch 1
 ax2.barh(y=1, width=4, left=1, height=0.5, color='#FFF2CC', edgecolor='#D6B656', hatch='//')
 ax2.text(3, 1, 'BATCH 1 Shipment +24', ha='center', va='center', fontsize=7.5, fontweight='bold', color='#7F6000')
