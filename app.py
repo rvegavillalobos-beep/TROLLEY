@@ -26,17 +26,14 @@ op_stock = []
 uph_capacity = []
 
 for idx, w in enumerate(weeks):
-    # Batch 1 arrives at CW1 (which is index 7 in this weeks list)
-    if idx == 7:  
+    if idx == 7:  # Starting CW1
         current_physical += b1
-    # Batch 2 arrives at CW8 (which is index 14 in this weeks list)
-    if idx == 14: 
+    if idx == 14: # Starting CW8
         current_physical += b2
         
     phys_stock.append(current_physical)
     
-    # Mechanical adjustment logic: 2 units/week, but PAUSED during Shutdown (CW52 at index 6, and CW1 at index 7)
-    # Note: At index 7 (CW1), Batch 1 arrives AND shutdown occurs, so mechanical adjustment is paused for that week.
+    # Mechanical adjustment logic: 2 units/week, paused during Shutdown (CW52 and CW1)
     is_shutdown = (weeks[idx] in ["CW52", "CW1"])
     
     if not is_shutdown and current_operational < current_physical:
@@ -48,12 +45,10 @@ for idx, w in enumerate(weeks):
     calculated_uph = round((current_operational / 90.0) * 30, 1)
     uph_capacity.append(calculated_uph)
 
-# 3. Weekly Production Data from Image (CW46 to CW8 converted to UPH via 45 hrs/week)
-# Weeks: CW46, CW47, CW48, CW49, CW50, CW51, CW52, CW1, CW2, CW3, CW4, CW5, CW6, CW7, CW8
+# 3. Weekly Production Data Converted to UPH (45 hrs/week: 5 days * 9 hours)
 raw_production_up_to_cw8 = [49, 69, 123, 147, 184, 196, 0, 0, 176, 199, 223, 246, 206, 280, 325]
 production_uph_demand = [round(p / 45.0, 1) if p > 0 else 0.0 for p in raw_production_up_to_cw8]
 
-# Extend to match n_weeks (CW46 to CW13), filling CW9-CW13 with None since data is only up to CW8
 while len(production_uph_demand) < n_weeks:
     production_uph_demand.append(None)
 
@@ -126,11 +121,7 @@ lines_2, labels_2 = ax_uph.get_legend_handles_labels()
 ax1.legend(lines_1 + lines_2, labels_1 + labels_2, frameon=False, loc='upper left', fontsize=8.5)
 
 
-# --- BOTTOM TRACKER: TIMELINE MILESTONES ---
-# Shutdown block spanning CW52 and CW1
-ax2.axvspan(6 - 0.5, 7 + 0.5, color='#D9D9D9', alpha=0.6)
-ax2.text(6.5, 0.75, 'SHUTDOWN', ha='center', va='center', fontsize=7.5, fontweight='bold', color='#595959', rotation=0)
-
+# --- BOTTOM TRACKER: TIMELINE MILESTONES (Batch and Customs only) ---
 # Row 1: Batch 1
 ax2.barh(y=1, width=4, left=1, height=0.5, color='#FFF2CC', edgecolor='#D6B656', hatch='//')
 ax2.text(3, 1, 'BATCH 1 Shipment +24', ha='center', va='center', fontsize=7.5, fontweight='bold', color='#7F6000')
