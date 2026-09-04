@@ -97,7 +97,7 @@ prod_line_color = '#27AE60'  # Green line for production UPH demand
 ax_uph = ax1.twinx()
 
 # Line 1: Available Line Capacity (UPH)
-ax_uph.plot(x, df["UPH_Capacity"], color=coral_color, marker='o', linewidth=2.0, markersize=4.5, label='Line Capacity Available (UPH)')
+ax_uph.plot(x, df["UPH_Capacity"], color=coral_color, marker='o', linewidth=2.0, markersize=4.5, label='Troley Capacity (UPH)')
 
 # Line 2: Production UPH Demand (up to CW8)
 ax_uph.plot(x, df["Prod_UPH_Demand"], color=prod_line_color, marker='s', linewidth=2.2, markersize=5, label='Production Demand (UPH, up to CW8)')
