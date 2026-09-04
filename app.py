@@ -106,7 +106,7 @@ for i, uph in enumerate(df["UPH_Capacity"]):
 # Line 2: Production UPH Demand (up to CW8)
 ax_uph.plot(x, df["Prod_UPH_Demand"], color=prod_line_color, marker='s', linewidth=2.2, markersize=5, label='Production Demand (UPH, up to CW8)')
 
-ax_uph.set_ylabel('Line Capacity & Demand (UPH)', fontsize=11, fontweight='bold', color=coral_color)
+ax_uph.set_ylabel('Trolley Capacity & Demand (UPH)', fontsize=11, fontweight='bold', color=coral_color)
 ax_uph.tick_params(axis='y', labelcolor=coral_color)
 ax_uph.set_ylim(0, 35)
 ax_uph.spines['top'].set_visible(False)
