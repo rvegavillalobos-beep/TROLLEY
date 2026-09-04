@@ -77,14 +77,14 @@ for i, v in enumerate(df["Operational"]):
 # --- BOTTOM TRACKER: TIMELINE MILESTONES (CLEANED UP) ---
 # Row 1: Batch 1 (Shipment width 4 at left 1, Customs width 2 at left 5)
 ax2.barh(y=1, width=4, left=1, height=0.5, color='#FFF2CC', edgecolor='#D6B656', hatch='//')
-ax2.text(3, 1, 'SHIPMENT (24 u)', ha='center', va='center', fontsize=7.5, fontweight='bold', color='#7F6000')
+ax2.text(3, 1, 'BATCH 1 Shipment +24', ha='center', va='center', fontsize=7.5, fontweight='bold', color='#7F6000')
 
 ax2.barh(y=1, width=2, left=5, height=0.5, color='#FFE599', edgecolor='#D6B656')
 ax2.text(6, 1, 'CUSTOMS', ha='center', va='center', fontsize=7, fontweight='bold', color='#7F6000')
 
 # Row 2: Batch 2 (Shipment width 4 at left 8, Customs width 2 at left 12)
 ax2.barh(y=0, width=4, left=8, height=0.5, color='#FFF2CC', edgecolor='#D6B656', hatch='//')
-ax2.text(10, 0, 'SHIPMENT (30 u)', ha='center', va='center', fontsize=7.5, fontweight='bold', color='#7F6000')
+ax2.text(10, 0, 'BATCH 2 Shipment +30', ha='center', va='center', fontsize=7.5, fontweight='bold', color='#7F6000')
 
 ax2.barh(y=0, width=2, left=12, height=0.5, color='#FFE599', edgecolor='#D6B656')
 ax2.text(13, 0, 'CUSTOMS', ha='center', va='center', fontsize=7, fontweight='bold', color='#7F6000')
