@@ -79,19 +79,22 @@ for i, v in enumerate(df["Operational"]):
 
 
 # --- TOP CHART: SECONDARY AXIS (UPH CAPACITY LINE) ---
+# Using a professional Deep Teal (#0F766E) that harmonizes with Navy Blue & Slate
+uph_color = '#0F766E'
+
 ax_uph = ax1.twinx()
-ax_uph.plot(x, df["UPH"], color='#C00000', marker='o', linewidth=2.0, markersize=4.5, label='Line Capacity (UPH)')
-ax_uph.set_ylabel('Line Capacity (UPH)', fontsize=11, fontweight='bold', color='#C00000')
-ax_uph.tick_params(axis='y', labelcolor='#C00000')
+ax_uph.plot(x, df["UPH"], color=uph_color, marker='o', linewidth=2.0, markersize=4.5, label='Line Capacity (UPH)')
+ax_uph.set_ylabel('Line Capacity (UPH)', fontsize=11, fontweight='bold', color=uph_color)
+ax_uph.tick_params(axis='y', labelcolor=uph_color)
 ax_uph.set_ylim(0, 35)
 ax_uph.spines['top'].set_visible(False)
 ax_uph.spines['left'].set_visible(False)
-ax_uph.spines['right'].set_color('#C00000')
+ax_uph.spines['right'].set_color(uph_color)
 ax_uph.grid(False)
 
-# Annotate small UPH values directly BELOW each point on the line (with smaller font size 6.5)
+# Annotate UPH values tightly below each point on the line (smaller font, minimal offset)
 for i, uph in enumerate(df["UPH"]):
-    ax_uph.text(i, uph - 2.2, f"{uph}", ha='center', va='top', fontsize=6.5, fontweight='bold', color='#C00000')
+    ax_uph.text(i, uph - 0.8, f"{uph}", ha='center', va='top', fontsize=6.5, fontweight='bold', color=uph_color)
 
 # Combine legends from both axes cleanly on top left
 lines_1, labels_1 = ax1.get_legend_handles_labels()
