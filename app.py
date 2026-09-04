@@ -99,6 +99,10 @@ ax_uph = ax1.twinx()
 # Line 1: Available Line Capacity (UPH)
 ax_uph.plot(x, df["UPH_Capacity"], color=coral_color, marker='o', linewidth=2.0, markersize=4.5, label='Line Capacity Available (UPH)')
 
+# Annotate UPH values tightly below each point on the orange line (restored)
+for i, uph in enumerate(df["UPH_Capacity"]):
+    ax_uph.text(i, uph - 0.8, f"{uph}", ha='center', va='top', fontsize=6.5, fontweight='bold', color=coral_color)
+
 # Line 2: Production UPH Demand (up to CW8)
 ax_uph.plot(x, df["Prod_UPH_Demand"], color=prod_line_color, marker='s', linewidth=2.2, markersize=5, label='Production Demand (UPH, up to CW8)')
 
