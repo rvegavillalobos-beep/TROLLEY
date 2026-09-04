@@ -73,16 +73,25 @@ ax1.spines['bottom'].set_color('#BFBFBF')
 ax1.grid(axis='y', linestyle='--', alpha=0.4)
 ax1.set_ylim(0, max(df["Physical"]) + 10)
 
+# Annotate trolley numbers on top of bars
+for i, v in enumerate(df["Operational"]):
+    ax1.text(i, v + 0.8, str(v), ha='center', va='bottom', fontsize=8, fontweight='semibold', color='#333333')
+
+
 # --- TOP CHART: SECONDARY AXIS (UPH CAPACITY LINE) ---
 ax_uph = ax1.twinx()
-ax_uph.plot(x, df["UPH"], color='#C00000', marker='o', linewidth=2.2, markersize=5, label='Line Capacity (UPH)')
+ax_uph.plot(x, df["UPH"], color='#C00000', marker='o', linewidth=2.0, markersize=4.5, label='Line Capacity (UPH)')
 ax_uph.set_ylabel('Line Capacity (UPH)', fontsize=11, fontweight='bold', color='#C00000')
 ax_uph.tick_params(axis='y', labelcolor='#C00000')
-ax_uph.set_ylim(0, 35) # Max target is 30 UPH
+ax_uph.set_ylim(0, 35)
 ax_uph.spines['top'].set_visible(False)
 ax_uph.spines['left'].set_visible(False)
 ax_uph.spines['right'].set_color('#C00000')
 ax_uph.grid(False)
+
+# Annotate small UPH values directly above each point on the line
+for i, uph in enumerate(df["UPH"]):
+    ax_uph.text(i, uph + 1.2, f"{uph}", ha='center', va='bottom', fontsize=7, fontweight='bold', color='#C00000')
 
 # Combine legends from both axes cleanly on top left
 lines_1, labels_1 = ax1.get_legend_handles_labels()
