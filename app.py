@@ -15,7 +15,7 @@ n_weeks = len(weeks)
 # 2. Simulation Logic
 physical = []
 operational = []
-base = 30
+base = 35  # Updated base fleet availability to 35 units
 b1 = 24
 b2 = 30
 
@@ -73,7 +73,7 @@ ax1.spines['left'].set_color('#BFBFBF')
 ax1.spines['bottom'].set_color('#BFBFBF')
 ax1.grid(axis='y', linestyle='--', alpha=0.4)
 
-# Set Y-axis scale from 0 to 95 with 10-by-10 ticks to cleanly display 90 on the axis
+# Set Y-axis scale from 0 to 96 with 10-by-10 ticks to cleanly display 90 on the axis
 ax1.set_ylim(0, 96)
 ax1.set_yticks(range(0, 91, 10))
 
@@ -138,7 +138,7 @@ plt.close(fig)
 
 col1, col2, col3, col4 = st.columns(4)
 with col1:
-    st.metric(label="Base Fleet", value="30 Units (10.0 UPH)")
+    st.metric(label="Base Fleet", value="35 Units (11.7 UPH)")
 with col2:
     st.metric(label="Total Inflow Planned", value="54 Units (2 Batches)")
 with col3:
