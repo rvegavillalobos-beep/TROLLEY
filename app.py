@@ -12,29 +12,30 @@ st.markdown("Operational readiness tracking constrained by a mechanical adjustme
 weeks = [f"CW{i}" for i in range(46, 53)] + [f"CW{i}" for i in range(1, 14)]
 n_weeks = len(weeks)
 
-# 2. Simulation Logic
+# 2. Simulation Logic aligned precisely with constraints:
 # Base inventory: 30 trolleys
-# Batch 1: 24 units (Shipped CW46-49, Customs CW50-52)
-# Batch 2: 30 units (Shipped CW2-CW6, Customs CW7-8)
+# Batch 1: 24 units -> Shipment CW47-CW50 (4 weeks), Customs Clearance CW51-CW52 (2 weeks), Physical stock updates at CW1 (after customs)
+# Batch 2: 30 units -> Shipment CW2-CW5 (4 weeks), Customs Clearance CW6-CW7 (2 weeks), Physical stock updates at CW8 (after customs)
 physical = []
 operational = []
 base = 30
 b1 = 24
 b2 = 30
 
-# Inventory milestone thresholds simulation
 current_physical = base
 current_operational = base
 adjustment_rate = 2
 
-op_stock = []
 phys_stock = []
+op_stock = []
 
 for idx, w in enumerate(weeks):
-    # Physical stock arrivals simulation based on diagram logic
-    if idx == 6: # CW52 (Batch 1 fully cleared)
+    # Physical stock updates ONLY AFTER customs clearance finishes:
+    # Index for CW1 is 7 (since CW46 is index 0)
+    # Index for CW8 is 14
+    if idx == 7:  # Starting CW1 (Batch 1 fully cleared customs at end of CW52)
         current_physical += b1
-    if idx == 13: # CW7 (Batch 2 fully cleared)
+    if idx == 14: # Starting CW8 (Batch 2 fully cleared customs at end of CW7)
         current_physical += b2
         
     phys_stock.append(current_physical)
@@ -50,8 +51,8 @@ df = pd.DataFrame({
     "Operational": op_stock
 })
 
-# 3. Professional Matplotlib Figure with Dual Grid / Milestone Matrix
-fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(14, 7), gridspec_kw={'height_ratios': [3, 1]}, sharex=True)
+# 3. Professional Matplotlib Figure with Tight Subplot Spacing
+fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(14, 6.5), gridspec_kw={'height_ratios': [3, 0.9], 'hspace': 0.05}, sharex=True)
 
 x = np.arange(n_weeks)
 width = 0.65
@@ -59,9 +60,9 @@ width = 0.65
 # --- TOP CHART: BAR CHART FOR INVENTORY ---
 bars_op = ax1.bar(x, df["Operational"], width, label='Operational Available (Adjusted)', color='#1F4E79')
 bars_wait = ax1.bar(x, df["Physical"] - df["Operational"], width, bottom=df["Operational"], 
-                    label='Pending Adjustment / In Transit', color='#D9E1F2', alpha=0.8)
+                    label='Pending Adjustment', color='#D9E1F2', alpha=0.8)
 
-ax1.set_ylabel('Trolley Count', fontsize=11, fontweight='bold', color='#262626')
+ax1.set_ylabel('Available Trolley', fontsize=11, fontweight='bold', color='#262626')
 ax1.set_title('Trolley Availability Ramp-Up & Bottleneck Control (Rate: 2 units/week)', fontsize=13, fontweight='bold', pad=15, color='#1F4E79')
 ax1.set_xticks(x)
 ax1.set_xticklabels(weeks, rotation=45, ha='right', fontsize=9)
@@ -80,25 +81,31 @@ for i, v in enumerate(df["Operational"]):
 
 
 # --- BOTTOM TRACKER: TIMELINE MILESTONES (GANTT STYLE ROWS) ---
-# Row 1: Batch 1
-ax2.barh(y=1, width=4, left=0, height=0.6, color='#FFF2CC', edgecolor='#D6B656', hatch='//') # Shipment CW46-49
-ax2.text(2, 1, 'BATCH 1 SHIPMENT (24 units)', ha='center', va='center', fontsize=8, fontweight='bold', color='#7F6000')
+# Mapping indices for weeks:
+# CW46 is index 0. 
+# Batch 1 Shipment: CW47 (idx 1) for 4 weeks -> width 4, left 1
+# Batch 1 Customs: CW51 (idx 5) for 2 weeks -> width 2, left 5
+# Batch 2 Shipment: CW2 (idx 8) for 4 weeks -> width 4, left 8
+# Batch 2 Customs: CW6 (idx 12) for 2 weeks -> width 2, left 12
 
-ax2.barh(y=1, width=3, left=4, height=0.6, color='#FFE599', edgecolor='#D6B656') # Customs CW50-52
-ax2.text(5.5, 1, 'CUSTOMS CLEARANCE', ha='center', va='center', fontsize=8, fontweight='bold', color='#7F6000')
+# Row 1: Batch 1 Milestones
+ax2.barh(y=1, width=4, left=1, height=0.55, color='#FFF2CC', edgecolor='#D6B656', hatch='//')
+ax2.text(3, 1, 'BATCH 1 SHIPMENT (24 units)', ha='center', va='center', fontsize=7.5, fontweight='bold', color='#7F6000')
 
-# Row 2: Batch 2
-# CW2 corresponds to index 7 in our array (CW46 is index 0)
-ax2.barh(y=0, width=5, left=7, height=0.6, color='#FFF2CC', edgecolor='#D6B656', hatch='//') # Shipment CW2-6
-ax2.text(9.5, 0, 'BATCH 2 SHIPMENT (30 units)', ha='center', va='center', fontsize=8, fontweight='bold', color='#7F6000')
+ax2.barh(y=1, width=2, left=5, height=0.55, color='#FFE599', edgecolor='#D6B656')
+ax2.text(6, 1, 'CUSTOMS CLEARANCE', ha='center', va='center', fontsize=7.5, fontweight='bold', color='#7F6000')
 
-ax2.barh(y=0, width=2, left=12, height=0.6, color='#FFE599', edgecolor='#D6B656') # Customs CW7-8
-ax2.text(13, 0, 'CUSTOMS', ha='center', va='center', fontsize=8, fontweight='bold', color='#7F6000')
+# Row 2: Batch 2 Milestones
+ax2.barh(y=0, width=4, left=8, height=0.55, color='#FFF2CC', edgecolor='#D6B656', hatch='//')
+ax2.text(10, 0, 'BATCH 2 SHIPMENT (30 units)', ha='center', va='center', fontsize=7.5, fontweight='bold', color='#7F6000')
+
+ax2.barh(y=0, width=2, left=12, height=0.55, color='#FFE599', edgecolor='#D6B656')
+ax2.text(13, 0, 'CUSTOMS CLEARANCE', ha='center', va='center', fontsize=7.5, fontweight='bold', color='#7F6000')
 
 # Styling bottom timeline tracker
 ax2.set_yticks([0, 1])
-ax2.set_yticklabels(['Batch 2 Milestones', 'Batch 1 Milestones'], fontsize=9, fontweight='semibold')
-ax2.set_ylim(-0.8, 1.8)
+ax2.set_yticklabels(['Batch 2', 'Batch 1'], fontsize=9, fontweight='semibold')
+ax2.set_ylim(-0.6, 1.6)
 ax2.spines['top'].set_visible(False)
 ax2.spines['right'].set_visible(False)
 ax2.spines['left'].set_color('#BFBFBF')
@@ -112,7 +119,7 @@ st.pyplot(fig)
 plt.close(fig)
 
 # Additional Professional Metrics Summary Cards
-col1, col2, col3 = st.columns(3)
+col1, col2, col3 = st.contours if hasattr(st, 'contours') else st.columns(3)
 with col1:
     st.metric(label="Base Fleet", value="30 Units")
 with col2:
