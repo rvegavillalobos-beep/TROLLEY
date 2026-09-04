@@ -13,9 +13,6 @@ weeks = [f"CW{i}" for i in range(46, 53)] + [f"CW{i}" for i in range(1, 14)]
 n_weeks = len(weeks)
 
 # 2. Simulation Logic
-# Base inventory: 30 trolleys
-# Batch 1: 24 units -> Shipment CW47-CW50 (4 weeks), Customs Clearance CW51-CW52 (2 weeks), Physical stock updates at CW1 (index 7)
-# Batch 2: 30 units -> Shipment CW2-CW5 (4 weeks), Customs Clearance CW6-CW7 (2 weeks), Physical stock updates at CW8 (index 14)
 physical = []
 operational = []
 base = 30
@@ -42,7 +39,7 @@ for idx, w in enumerate(weeks):
         current_operational = min(current_physical, current_operational + adjustment_rate)
     op_stock.append(current_operational)
     
-    # Calculate UPH capacity based on ratio: 90 trolleys = 30 UPH (i.e., Trolleys / 3)
+    # Calculate UPH capacity based on ratio: 90 trolleys = 30 UPH (Trolleys / 3)
     calculated_uph = round((current_operational / 90.0) * 30, 1)
     uph_capacity.append(calculated_uph)
 
@@ -53,37 +50,47 @@ df = pd.DataFrame({
     "UPH": uph_capacity
 })
 
-# 3. Professional Matplotlib Figure with Twin Axes for Capacity (UPH)
-fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(14, 6.2), gridspec_kw={'height_ratios': [3, 0.7], 'hspace': 0.05}, sharex=True)
+# 3. Professional Matplotlib Figure with Dual Axes (Bars for Trolleys, Line for UPH)
+fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(14, 6.5), gridspec_kw={'height_ratios': [3, 0.7], 'hspace': 0.05}, sharex=True)
 
 x = np.arange(n_weeks)
 width = 0.65
 
-# --- TOP CHART: BAR CHART FOR INVENTORY & LINE CAPACITY ---
+# --- TOP CHART: PRIMARY AXIS (TROLLEYS BARS) ---
 ax1.bar(x, df["Operational"], width, label='Operational Available (Adjusted)', color='#1F4E79')
 ax1.bar(x, df["Physical"] - df["Operational"], width, bottom=df["Operational"], 
         label='Pending Adjustment', color='#D9E1F2', alpha=0.8)
 
-ax1.set_ylabel('Available Trolley', fontsize=11, fontweight='bold', color='#262626')
+ax1.set_ylabel('Available Trolley', fontsize=11, fontweight='bold', color='#1F4E79')
 ax1.set_title('Trolley Availability & Line Capacity Ramp-Up (Rate: 2 units/week)', fontsize=13, fontweight='bold', pad=15, color='#1F4E79')
 ax1.set_xticks(x)
 ax1.set_xticklabels(weeks, rotation=45, ha='right', fontsize=9)
-ax1.legend(frameon=False, loc='upper left', fontsize=10)
 
 ax1.spines['top'].set_visible(False)
 ax1.spines['right'].set_visible(False)
 ax1.spines['left'].set_color('#BFBFBF')
 ax1.spines['bottom'].set_color('#BFBFBF')
 ax1.grid(axis='y', linestyle='--', alpha=0.4)
+ax1.set_ylim(0, max(df["Physical"]) + 10)
 
-# Annotate specific operational values and UPH capacity equivalent on top of bars
-for i, (v, uph) in enumerate(zip(df["Operational"], df["UPH"])):
-    ax1.text(i, v + 0.8, f"{v}\n({uph} UPH)", ha='center', va='bottom', fontsize=7.5, fontweight='semibold', color='#333333')
+# --- TOP CHART: SECONDARY AXIS (UPH CAPACITY LINE) ---
+ax_uph = ax1.twinx()
+ax_uph.plot(x, df["UPH"], color='#C00000', marker='o', linewidth=2.2, markersize=5, label='Line Capacity (UPH)')
+ax_uph.set_ylabel('Line Capacity (UPH)', fontsize=11, fontweight='bold', color='#C00000')
+ax_uph.tick_params(axis='y', labelcolor='#C00000')
+ax_uph.set_ylim(0, 35) # Max target is 30 UPH
+ax_uph.spines['top'].set_visible(False)
+ax_uph.spines['left'].set_visible(False)
+ax_uph.spines['right'].set_color('#C00000')
+ax_uph.grid(False)
 
-ax1.set_ylim(0, max(df["Physical"]) + 8)
+# Combine legends from both axes cleanly on top left
+lines_1, labels_1 = ax1.get_legend_handles_labels()
+lines_2, labels_2 = ax_uph.get_legend_handles_labels()
+ax1.legend(lines_1 + lines_2, labels_1 + labels_2, frameon=False, loc='upper left', fontsize=9)
 
 
-# --- BOTTOM TRACKER: TIMELINE MILESTONES (UPDATED LABELS) ---
+# --- BOTTOM TRACKER: TIMELINE MILESTONES ---
 # Row 1: Batch 1
 ax2.barh(y=1, width=4, left=1, height=0.5, color='#FFF2CC', edgecolor='#D6B656', hatch='//')
 ax2.text(3, 1, 'BATCH 1 Shipment +24', ha='center', va='center', fontsize=7.5, fontweight='bold', color='#7F6000')
@@ -115,10 +122,10 @@ plt.close(fig)
 
 col1, col2, col3, col4 = st.columns(4)
 with col1:
-    st.metric(label="Base Fleet", value="30 Units (10 UPH)")
+    st.metric(label="Base Fleet", value="30 Units (10.0 UPH)")
 with col2:
     st.metric(label="Total Inflow Planned", value="54 Units (2 Batches)")
 with col3:
     st.metric(label="Adjustment Bottleneck", value="2 Units / Week")
 with col4:
-    st.metric(label="Target Line Capacity", value="90 Units (30 UPH)")
+    st.metric(label="Target Line Capacity", value="90 Units (30.0 UPH)")
