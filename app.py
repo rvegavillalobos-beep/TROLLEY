@@ -8,14 +8,14 @@ st.set_page_config(page_title="Trolley Availability & Line Capacity Ramp-Up", la
 st.title("📦 Trolley Availability & Production Capacity Ramp-Up")
 st.markdown("Operational readiness and line UPH capability constrained by a mechanical adjustment rate of **2 units/week** (Target: 90 trolleys for 30 UPH).")
 
-# 1. Timeline Setup: Extended to CW15 of next year (reaching 20 UPH)
-weeks = [f"CW{i}" for i in range(46, 53)] + [f"CW{i}" for i in range(1, 16)]
+# 1. Timeline Setup: Extended to CW13 of next year (reaching 20 UPH with base 35)
+weeks = [f"CW{i}" for i in range(46, 53)] + [f"CW{i}" for i in range(1, 14)]
 n_weeks = len(weeks)
 
 # 2. Simulation Logic
 physical = []
 operational = []
-base = 35  # Updated base fleet availability to 35 units
+base = 35  # Base fleet availability is 35 units
 b1 = 24
 b2 = 30
 
