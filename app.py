@@ -33,8 +33,8 @@ if uploaded_file is not None:
 
     date_col = st.sidebar.selectbox("Date Column", columns, index=columns.index(default_date) if default_date in columns else 0)
     status_col = st.sidebar.selectbox("Status Column", columns, index=columns.index(default_status) if default_status in columns else 0)
-    type_col = st.sidebar.selectbox("Type Column (e.g., TL, TR, TQ)", columns, index=columns.index(default_type) if default_type in columns else 0)
-    severity_col = st.sidebar.selectbox("Severity / Magnitude Column", columns, index=columns.index(default_severity) if default_severity in columns else 0)
+    type_col = st.sidebar.selectbox("Conveyor / Station Type Column", columns, index=columns.index(default_type) if default_type in columns else 0)
+    severity_col = st.sidebar.selectbox("Severity Category Column", columns, index=columns.index(default_severity) if default_severity in columns else 0)
 
     try:
         # Process dates
@@ -42,81 +42,62 @@ if uploaded_file is not None:
         df = df.dropna(subset=[date_col])
         df['Week'] = df[date_col].dt.strftime('W%V')
 
-        # Normalize statuses
-        def map_status(val):
-            val_str = str(val).strip().lower()
-            if 'clos' in val_str:
-                return 'Closed'
-            elif 'conf' in val_str or 'pend' in val_str or 'rem' in val_str or 'req' in val_str:
-                return 'Resolved'
-            else:
-                return 'Assigned'
-
-        df['Clean_Status'] = df[status_col].apply(map_status)
+        # Clean/Normalize categorical fields
+        df['Fix_Status'] = df[status_col].astype(str).str.strip().str.title()
         df['Equipment_Type'] = df[type_col].astype(str).str.strip().str.upper()
         df['Severity'] = df[severity_col].astype(str).str.strip().str.capitalize()
 
-        # --- SECTION 1: Hierarchical Defect Matrix (Type & Severity) ---
-        st.markdown("### 📋 Defects Matrix by Status, Type, and Severity")
+        # --- TABLE 1: General Matrix (Fix Status vs. Severity Categories + Totals) ---
+        st.markdown("### 📋 Table 1: General Defects Matrix (Status vs. Severity)")
         
-        # Create multi-index crosstab table grouped by Type and Severity
-        matrix_table = pd.crosstab(
-            df['Clean_Status'], 
-            [df['Equipment_Type'], df['Severity']], 
+        table1 = pd.crosstab(
+            df['Fix_Status'], 
+            df['Severity'], 
             margins=True, 
             margins_name="Total"
         )
         
-        # Ensure proper row order
-        desired_rows = [r for r in ['Assigned', 'Resolved', 'Closed'] if r in matrix_table.index]
-        if 'Total' in matrix_table.index:
-            desired_rows.append('Total')
-        matrix_table = matrix_table.reindex(index=desired_rows, fill_value=0)
-
-        # Apply professional conditional styling
-        def color_status_rows(row):
-            if row.name == 'Assigned':
-                return ['background-color: #FADBD8; color: #78281F; font-weight: bold'] * len(row)
-            elif row.name == 'Resolved':
-                return ['background-color: #FCF3CF; color: #7D6608; font-weight: bold'] * len(row)
-            elif row.name == 'Closed':
-                return ['background-color: #D4EFDF; color: #145A32; font-weight: bold'] * len(row)
-            elif row.name == 'Total':
+        # Style Table 1
+        def color_table1(row):
+            if row.name == 'Total':
                 return ['background-color: #EAEDED; color: #2C3E50; font-weight: bold'] * len(row)
             return [''] * len(row)
 
-        styled_matrix = matrix_table.style.apply(color_status_rows, axis=1)
-        st.dataframe(styled_matrix, use_container_width=True)
+        st.dataframe(table1.style.apply(color_table1, axis=1), use_container_width=True)
 
-        # --- SECTION 2: Cumulative Stacked Area Chart ---
-        st.markdown("### 📈 Assigned, Resolved and Closed Defects Cumulated Over Time")
+        # --- TABLE 2: Conveyor / Station Matrix (Equipment Type vs. Status & Severity) ---
+        st.markdown("### 📋 Table 2: Conveyor / Station Breakdown Matrix")
         
-        pivot = pd.pivot_table(df, index='Week', columns='Clean_Status', values=date_col, aggfunc='count', fill_value=0)
-        for col in ['Closed', 'Resolved', 'Assigned']:
-            if col not in pivot.columns:
-                pivot[col] = 0
-        pivot = pivot[['Closed', 'Resolved', 'Assigned']]
+        table2 = pd.crosstab(
+            df['Equipment_Type'], 
+            [df['Fix_Status'], df['Severity']], 
+            margins=True, 
+            margins_name="TOTAL"
+        )
+        
+        st.dataframe(table2, use_container_width=True)
+
+        # --- SECTION 3: Cumulative Stacked Area Chart ---
+        st.markdown("### 📈 Defects Cumulated Over Time")
+        
+        pivot = pd.pivot_table(df, index='Week', columns='Fix_Status', values=date_col, aggfunc='count', fill_value=0)
+        status_list = list(pivot.columns)
         cumulative_pivot = pivot.cumsum()
 
         fig, ax = plt.subplots(figsize=(11, 5.5), dpi=300)
 
         weeks = cumulative_pivot.index
-        y_closed = cumulative_pivot['Closed']
-        y_resolved = cumulative_pivot['Resolved'] + y_closed
-        y_assigned = cumulative_pivot['Assigned'] + y_resolved
-
-        # Corporate color palette
-        color_closed = '#27AE60'   # Green (Closed)
-        color_resolved = '#F39C12' # Amber (Confirmation pending)
-        color_assigned = '#C0392B' # Red (Open)
-
-        ax.fill_between(weeks, 0, y_closed, label='Closed cumulated', color=color_closed, alpha=0.9)
-        ax.fill_between(weeks, y_closed, y_resolved, label='Resolved / Confirmation pending cumulated', color=color_resolved, alpha=0.9)
-        ax.fill_between(weeks, y_resolved, y_assigned, label='Assigned / Open cumulated', color=color_assigned, alpha=0.9)
-
-        ax.plot(weeks, y_closed, color='black', linewidth=0.8)
-        ax.plot(weeks, y_resolved, color='black', linewidth=0.8)
-        ax.plot(weeks, y_assigned, color='black', linewidth=0.8)
+        
+        # Dynamically stack areas
+        y_prev = np.zeros(len(weeks))
+        colors = ['#C0392B', '#F39C12', '#27AE60', '#2980B9', '#8E44AD', '#34495E']
+        
+        for idx, col in enumerate(status_list):
+            y_curr = y_prev + cumulative_pivot[col]
+            color_val = colors[idx % len(colors)]
+            ax.fill_between(weeks, y_prev, y_curr, label=f"{col} cumulated", color=color_val, alpha=0.9)
+            ax.plot(weeks, y_curr, color='black', linewidth=0.8)
+            y_prev = y_curr
 
         ax.yaxis.tick_right()
         ax.yaxis.set_label_position("right")
