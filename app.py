@@ -4,88 +4,131 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 
-st.set_page_config(page_title='Plant Defect Dashboard Automation', layout='wide')
+st.set_page_config(page_title='Plant Defect Management Dashboard', layout='wide')
 
 st.title('📊 Plant Defect Management Dashboard')
 st.markdown(
-    'Automatización del reporte de defectos, tabla resumen y gráfico acumulado.'
+    'Automated tracking system for industrial automation, conveyor lines, and'
+    ' installation defects.'
 )
 
-st.sidebar.header('1. Carga de Archivo')
+st.sidebar.header('1. File Upload')
 uploaded_file = st.sidebar.file_uploader(
-    'Sube tu archivo Excel (.xlsx)', type=['xlsx', 'xls']
+    'Upload tracking Excel file (.xlsx)', type=['xlsx', 'xls']
 )
 
 if uploaded_file is not None:
   try:
     df = pd.read_excel(uploaded_file, sheet_name=0)
-    st.sidebar.success('¡Archivo cargado con éxito!')
+    st.sidebar.success('File successfully loaded!')
   except Exception as e:
-    st.error(f'Error al leer el archivo: {e}')
+    st.error(f'Error reading file: {e}')
     st.stop()
 
-  with st.expander('🔍 Vista previa de los datos detectados'):
+  with st.expander('🔍 Data Preview'):
     st.dataframe(df.head(5))
 
   columns = list(df.columns)
-  st.sidebar.header('2. Mapeo de Columnas')
+  st.sidebar.header('2. Column Mapping')
 
   default_date = 'Date measured' if 'Date measured' in columns else columns[0]
   default_status = 'Fix Status' if 'Fix Status' in columns else columns[0]
-  default_type = 'Type' if 'Type' in columns else columns[0]
+  default_severity = (
+      'Magnitude [m/s^2]'
+      if 'Magnitude [m/s^2]' in columns
+      else (columns[1] if len(columns) > 1 else columns[0])
+  )
 
   date_col = st.sidebar.selectbox(
-      'Columna de Fecha (Date measured)',
+      'Date Column (e.g., Date measured)',
       columns,
       index=columns.index(default_date) if default_date in columns else 0,
   )
   status_col = st.sidebar.selectbox(
-      'Columna de Estatus (Fix Status)',
+      'Status Column (e.g., Fix Status)',
       columns,
       index=columns.index(default_status) if default_status in columns else 0,
   )
-  type_col = st.sidebar.selectbox(
-      'Columna de Tipo/Categoría (Type)',
+  severity_col = st.sidebar.selectbox(
+      'Severity / Magnitude Column',
       columns,
-      index=columns.index(default_type) if default_type in columns else 0,
+      index=columns.index(default_severity)
+      if default_severity in columns
+      else 0,
   )
 
   try:
-    # Procesar fechas y extraer semanas
+    # Process dates
     df[date_col] = pd.to_datetime(df[date_col], errors='coerce')
     df = df.dropna(subset=[date_col])
     df['Week'] = df[date_col].dt.strftime('W%V')
 
 
-    # Normalizar estatus a los 3 estados requeridos
+    # Normalize statuses to: Assigned (Open), Resolved (Confirmation pending), Closed
     def map_status(val):
       val_str = str(val).strip().lower()
       if 'clos' in val_str:
         return 'Closed'
-      elif 'rem' in val_str or 'pend' in val_str or 'req' in val_str:
-        return 'Resolved'
+      elif (
+          'conf' in val_str
+          or 'pend' in val_str
+          or 'rem' in val_str
+          or 'req' in val_str
+      ):
+        return 'Resolved'  # Acts as Confirmation pending / Resolved
       else:
-        return 'Assigned'
+        return 'Assigned'  # Acts as Open
 
 
     df['Clean_Status'] = df[status_col].apply(map_status)
 
-    # --- SECCIÓN 1: Tabla Resumen por Tipo y Estatus ---
-    st.markdown('### 📋 Resumen de Defectos por Tipo y Estatus')
-    summary_table = pd.crosstab(
-        df['Clean_Status'], df[type_col], margins=True, margins_name='Total'
-    )
-    row_order = [
-        r for r in ['Assigned', 'Resolved', 'Closed'] if r in summary_table.index
-    ]
-    if 'Total' in summary_table.index:
-      row_order.append('Total')
-    summary_table = summary_table.reindex(index=row_order, fill_value=0)
-    st.dataframe(summary_table, use_container_width=True)
+    # Normalize severity categories
+    df['Severity'] = df[severity_col].astype(str).str.strip().str.capitalize()
 
-    # --- SECCIÓN 2: Gráfico de Áreas Acumuladas ---
+    # --- SECTION 1: Defect Matrix Table by Status and Severity (Styled) ---
+    st.markdown('### 📋 Defects Matrix by Status and Severity')
+
+    # Create pivot table matching reference dashboard (Statuses as rows, Severities as columns)
+    matrix_table = pd.crosstab(
+        df['Clean_Status'], df['Severity'], margins=True, margins_name='Total'
+    )
+
+    # Ensure row order: Assigned, Resolved, Closed, Total
+    desired_rows = [
+        r for r in ['Assigned', 'Resolved', 'Closed'] if r in matrix_table.index
+    ]
+    if 'Total' in matrix_table.index:
+      desired_rows.append('Total')
+    matrix_table = matrix_table.reindex(index=desired_rows, fill_value=0)
+
+
+    # Apply professional coloring to the dataframe rows
+    def color_status_rows(row):
+      if row.name == 'Assigned':
+        return [
+            'background-color: #FADBD8; color: #78281F; font-weight: bold'
+        ] * len(row)
+      elif row.name == 'Resolved':
+        return [
+            'background-color: #FCF3CF; color: #7D6608; font-weight: bold'
+        ] * len(row)
+      elif row.name == 'Closed':
+        return [
+            'background-color: #D4EFDF; color: #145A32; font-weight: bold'
+        ] * len(row)
+      elif row.name == 'Total':
+        return [
+            'background-color: #EAEDED; color: #2C3E50; font-weight: bold'
+        ] * len(row)
+      return [''] * len(row)
+
+
+    styled_matrix = matrix_table.style.apply(color_status_rows, axis=1)
+    st.dataframe(styled_matrix, use_container_width=True)
+
+    # --- SECTION 2: Cumulative Stacked Area Chart ---
     st.markdown(
-        '### 📈 Assigned, resolved and closed defects cumulated over time'
+        '### 📈 Assigned, Resolved and Closed Defects Cumulated Over Time'
     )
 
     pivot = pd.pivot_table(
@@ -109,10 +152,10 @@ if uploaded_file is not None:
     y_resolved = cumulative_pivot['Resolved'] + y_closed
     y_assigned = cumulative_pivot['Assigned'] + y_resolved
 
-    # Colores corporativos idénticos al dashboard
-    color_closed = '#556B2F'  # Verde oliva
-    color_resolved = '#E69500'  # Naranja / Ámbar
-    color_assigned = '#A00000'  # Rojo vino
+    # Corporate color palette matching your reference
+    color_closed = '#27AE60'  # Green (Closed)
+    color_resolved = '#F39C12'  # Amber / Yellow (Confirmation pending)
+    color_assigned = '#C0392B'  # Red (Open)
 
     ax.fill_between(
         weeks,
@@ -126,7 +169,7 @@ if uploaded_file is not None:
         weeks,
         y_closed,
         y_resolved,
-        label='Resolved cumulated',
+        label='Resolved / Confirmation pending cumulated',
         color=color_resolved,
         alpha=0.9,
     )
@@ -134,7 +177,7 @@ if uploaded_file is not None:
         weeks,
         y_resolved,
         y_assigned,
-        label='Assigned cumulated',
+        label='Assigned / Open cumulated',
         color=color_assigned,
         alpha=0.9,
     )
@@ -160,22 +203,22 @@ if uploaded_file is not None:
 
     st.pyplot(fig)
 
-    # Botón para descargar el gráfico listo para tus reportes
+    # Download button for chart
     buf = BytesIO()
     fig.savefig(buf, format='png', dpi=300, bbox_inches='tight')
     buf.seek(0)
     st.sidebar.markdown('---')
     st.sidebar.download_button(
-        label='📥 Descargar Gráfica (PNG)',
+        label='📥 Download Chart (PNG)',
         data=buf,
         file_name='defects_cumulative_chart.png',
         mime='image/png',
     )
 
   except Exception as e:
-    st.error(f'Ocurrió un error al procesar los datos: {e}')
+    st.error(f'Error processing data: {e}')
 else:
   st.info(
-      '👈 Por favor, carga tu archivo Excel en la barra lateral para generar'
-      ' el reporte.'
+      '👈 Please upload your Excel tracking file in the sidebar to generate'
+      ' the professional dashboard.'
   )
