@@ -33,8 +33,8 @@ if uploaded_file is not None:
 
     date_col = st.sidebar.selectbox("Date Column", columns, index=columns.index(default_date) if default_date in columns else 0)
     status_col = st.sidebar.selectbox("Status Column", columns, index=columns.index(default_status) if default_status in columns else 0)
-    type_col = st.sidebar.selectbox("Conveyor / Station Type Column", columns, index=columns.index(default_type) if default_type in columns else 0)
-    severity_col = st.sidebar.selectbox("Severity Category Column", columns, index=columns.index(default_severity) if default_severity in columns else 0)
+    type_col = st.sidebar.selectbox("Element Type Column", columns, index=columns.index(default_type) if default_type in columns else 0)
+    severity_col = st.sidebar.selectbox("Severity Column", columns, index=columns.index(default_severity) if default_severity in columns else 0)
 
     try:
         # Process dates
@@ -62,62 +62,145 @@ if uploaded_file is not None:
                 return 'Minor'
 
         df['Fix_Status'] = df[status_col].apply(map_status)
-        df['Equipment_Type'] = df[type_col].astype(str).str.strip().str.upper()
+        df['Element_Type'] = df[type_col].astype(str).str.strip().str.upper()
         df['Severity'] = df[severity_col].apply(map_severity)
 
-        # Enforce exact column order
         status_order = ['Open', 'Confirmation Pending', 'Closed']
         severity_order = ['Minor', 'Major', 'Critical']
 
-        # --- SIDE-BY-SIDE LAYOUT FOR TABLES ---
         st.markdown("---")
-        col_t1, col_t2 = st.columns(2)
 
-        # TABLE 1: General Matrix (Fix Status vs. Severity Categories + Totals)
-        with col_t1:
-            st.markdown("### General Defects Matrix (Status vs. Severity)")
-            table1 = pd.crosstab(
-                df['Fix_Status'], 
-                df['Severity'], 
-                margins=True, 
-                margins_name="Total"
-            )
+        # --- TABLE 1: General Matrix (Fix Status vs. Severity) ---
+        st.markdown("### General Defects Matrix (Status vs. Severity)")
+        
+        t1_data = pd.crosstab(df['Fix_Status'], df['Severity'], margins=True, margins_name="Total")
+        t1_rows = [r for r in status_order if r in t1_data.index]
+        if 'Total' in t1_data.index: t1_rows.append('Total')
+        t1_cols = [c for c in severity_order if c in t1_data.columns]
+        if 'Total' in t1_data.columns: t1_cols.append('Total')
+        t1_data = t1_data.reindex(index=t1_rows, columns=t1_cols, fill_value=0)
+
+        # Render Table 1 with exact header styling matching reference image
+        t1_html = f"""
+        <style>
+        .custom-table {{
+            border-collapse: collapse;
+            width: 100%;
+            font-family: sans-serif;
+            font-size: 14px;
+            text-align: center;
+        }}
+        .custom-table th, .custom-table td {{
+            border: 1px solid #b0bec5;
+            padding: 8px 12px;
+        }}
+        .custom-table th {{
+            color: #000000;
+            font-weight: bold;
+        }}
+        .th-minor {{ background-color: #FFEE58; }}
+        .th-major {{ background-color: #EF5350; color: #ffffff !important; }}
+        .th-critical {{ background-color: #212121; color: #ffffff !important; }}
+        .th-total {{ background-color: #CFD8DC; }}
+        .row-header {{ background-color: #ECEFF1; font-weight: bold; text-align: left; }}
+        </style>
+        <table class="custom-table">
+            <thead>
+                <tr>
+                    <th class="row-header">Fix Status</th>
+                    <th class="th-minor">Minor</th>
+                    <th class="th-major">Major</th>
+                    <th class="th-critical">Critical</th>
+                    <th class="th-total">Total</th>
+                </tr>
+            </thead>
+            <tbody>
+        """
+        for r in t1_rows:
+            t1_html += f"<tr><td class='row-header'>{r}</td>"
+            for c in t1_cols:
+                val = t1_data.loc[r, c] if r in t1_data.index and c in t1_data.columns else 0
+                t1_html += f"<td>{val}</td>"
+            t1_html += "</tr>"
+        t1_html += "</tbody></table>"
+        st.markdown(t1_html, unsafe_allow_html=True)
+
+        st.markdown("<br>", unsafe_allow_html=True)
+
+        # --- TABLE 2: Element Type Breakdown Matrix (Status & Severity split) ---
+        st.markdown("### Element Type Breakdown Matrix")
+
+        t2_status = pd.crosstab(df['Element_Type'], df['Fix_Status'])
+        t2_severity = pd.crosstab(df['Element_Type'], df['Severity'])
+        
+        # Combine both breakdowns side-by-side per element type
+        types_list = sorted(list(df['Element_Type'].unique()))
+        
+        t2_html = f"""
+        <table class="custom-table">
+            <thead>
+                <tr>
+                    <th rowspan="2" class="row-header" style="vertical-align: middle;">Element Type</th>
+                    <th colspan="3" style="background-color: #CFD8DC;">Status</th>
+                    <th colspan="3" style="background-color: #CFD8DC;">Severity</th>
+                </tr>
+                <tr>
+                    <th class="th-open" style="background-color: #81C784;">Open</th>
+                    <th class="th-closed" style="background-color: #E57373;">Closed</th>
+                    <th class="th-conf" style="background-color: #FFD54F;">Confirmation Pending</th>
+                    <th class="th-minor">Minor</th>
+                    <th class="th-major">Major</th>
+                    <th class="th-critical">Critical</th>
+                </tr>
+            </thead>
+            <tbody>
+        """
+
+        totals = {'Open': 0, 'Closed': 0, 'Confirmation Pending': 0, 'Minor': 0, 'Major': 0, 'Critical': 0}
+
+        for etype in types_list:
+            o_val = int(t2_status.loc[etype, 'Open']) if etype in t2_status.index and 'Open' in t2_status.columns else 0
+            c_val = int(t2_status.loc[etype, 'Closed']) if etype in t2_status.index and 'Closed' in t2_status.columns else 0
+            cp_val = int(t2_status.loc[etype, 'Confirmation Pending']) if etype in t2_status.index and 'Confirmation Pending' in t2_status.columns else 0
             
-            # Reindex rows and columns cleanly
-            row_idx = [r for r in status_order if r in table1.index]
-            if 'Total' in table1.index: row_idx.append('Total')
-            col_idx = [c for c in severity_order if c in table1.columns]
-            if 'Total' in table1.columns: col_idx.append('Total')
-            table1 = table1.reindex(index=row_idx, columns=col_idx, fill_value=0)
+            min_val = int(t2_severity.loc[etype, 'Minor']) if etype in t2_severity.index and 'Minor' in t2_severity.columns else 0
+            maj_val = int(t2_severity.loc[etype, 'Major']) if etype in t2_severity.index and 'Major' in t2_severity.columns else 0
+            crit_val = int(t2_severity.loc[etype, 'Critical']) if etype in t2_severity.index and 'Critical' in t2_severity.columns else 0
 
-            # Styling table 1 with reference colors (Minor = Yellow, Major = Red, Critical = Black/Dark)
-            def style_table1(val, col_name):
-                if col_name == 'Minor':
-                    return 'background-color: #FFF9C4; color: #000000; font-weight: bold;'
-                elif col_name == 'Major':
-                    return 'background-color: #FFCDD2; color: #000000; font-weight: bold;'
-                elif col_name == 'Critical':
-                    return 'background-color: #CFD8DC; color: #000000; font-weight: bold;'
-                return ''
+            totals['Open'] += o_val
+            totals['Closed'] += c_val
+            totals['Confirmation Pending'] += cp_val
+            totals['Minor'] += min_val
+            totals['Major'] += maj_val
+            totals['Critical'] += crit_val
 
-            st.dataframe(table1, use_container_width=True)
+            t2_html += f"""
+                <tr>
+                    <td class="row-header">{etype}</td>
+                    <td>{o_val}</td>
+                    <td>{c_val}</td>
+                    <td>{cp_val}</td>
+                    <td>{min_val}</td>
+                    <td>{maj_val}</td>
+                    <td>{crit_val}</td>
+                </tr>
+            """
 
-        # TABLE 2: Conveyor / Station Breakdown Matrix (Equipment Type vs. Status)
-        with col_t2:
-            st.markdown("### Conveyor / Station Breakdown Matrix")
-            table2 = pd.crosstab(
-                df['Equipment_Type'], 
-                df['Fix_Status'], 
-                margins=True, 
-                margins_name="TOTAL"
-            )
-            
-            # Reindex columns to Open, Confirmation Pending, Closed, TOTAL
-            t2_cols = [c for c in status_order if c in table2.columns]
-            if 'TOTAL' in table2.columns: t2_cols.append('TOTAL')
-            table2 = table2.reindex(columns=t2_cols, fill_value=0)
-
-            st.dataframe(table2, use_container_width=True)
+        # TOTAL Row
+        t2_html += f"""
+                <tr style="font-weight: bold; background-color: #ECEFF1;">
+                    <td class="row-header">TOTAL</td>
+                    <td>{totals['Open']}</td>
+                    <td>{totals['Closed']}</td>
+                    <td>{totals['Confirmation Pending']}</td>
+                    <td>{totals['Minor']}</td>
+                    <td>{totals['Major']}</td>
+                    <td>{totals['Critical']}</td>
+                </tr>
+            </tbody>
+        </table>
+        """
+        st.markdown(t2_html, unsafe_allow_html=True)
 
         # --- SECTION 3: Cumulative Stacked Area Chart ---
         st.markdown("---")
@@ -136,7 +219,6 @@ if uploaded_file is not None:
         y_conf = cumulative_pivot['Confirmation Pending'] + y_open
         y_closed = cumulative_pivot['Closed'] + y_conf
 
-        # Professional palette matching status colors
         color_open = '#C0392B'   # Red
         color_conf = '#F39C12'   # Amber / Yellow
         color_closed = '#27AE60' # Green
