@@ -1,170 +1,210 @@
-import streamlit as st
-import pandas as pd
+import io
+import matplotlib.gridspec as gridspec
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 
-st.set_page_config(page_title="Trolley Availability & Line Capacity Ramp-Up", layout="wide")
+# ---------------------------------------------------------
+# 1. GENERACIÓN / CARGA DE DATOS (Simulación basada en el reporte real)
+# ---------------------------------------------------------
+np.random.seed(42)
+n_samples = 120
 
-st.title("📦 Trolley Availability & Trolley Capacity vs. Production Demand")
-st.markdown("Operational readiness and trolley-based capacity constrained by a mechanical adjustment rate of **2 units/week** (Paused during CW52 & CW1 Shutdown; Target: 90 trolleys for 30 UPH equivalent).")
+# Fechas de junio a agosto de 2026 (CW23 a CW34)
+dates = pd.date_range(start="2026-06-01", end="2026-08-20", periods=n_samples)
+calendar_weeks = [
+    "CW" + str(d.isocalendar().week).zfill(2) for d in dates
+]
 
-# 1. Timeline Setup: Extended to CW13
-weeks = [f"CW{i}" for i in range(46, 53)] + [f"CW{i}" for i in range(1, 14)]
-n_weeks = len(weeks)
+# Simulación de tendencias basadas en el análisis real:
+# - Centroid X: Sesgo negativo constante (-2 a -8 mm)
+# - Centroid Y: Transición de negativo/neutro a positivo fuerte en agosto (+1 a +3 mm)
+trend_factor = np.linspace(0, 1, n_samples)
+centroid_x = -3.5 + np.random.normal(0, 1.2, n_samples) - (trend_factor * 1.5)
+centroid_y = -0.5 + (trend_factor * 2.5) + np.random.normal(0, 0.8, n_samples)
 
-# 2. Simulation Logic for Trolleys & UPH Capacity
-base = 35  # Base fleet availability
-b1 = 24    # Batch 1 arrives at CW1
-b2 = 30    # Batch 2 arrives at CW8
+magnitude_r = np.sqrt(centroid_x**2 + centroid_y**2)
+status = np.where(magnitude_r > 3.0, "FAIL", "PASS")
 
-current_physical = base
-current_operational = base
-adjustment_rate = 2
-
-phys_stock = []
-op_stock = []
-uph_capacity = []
-
-for idx, w in enumerate(weeks):
-    if idx == 7:  # Starting CW1
-        current_physical += b1
-    if idx == 14: # Starting CW8
-        current_physical += b2
-        
-    phys_stock.append(current_physical)
-    
-    # Mechanical adjustment logic: 2 units/week, paused during Shutdown (CW52 and CW1)
-    is_shutdown = (weeks[idx] in ["CW52", "CW1"])
-    
-    if not is_shutdown and current_operational < current_physical:
-        current_operational = min(current_physical, current_operational + adjustment_rate)
-        
-    op_stock.append(current_operational)
-    
-    # Calculate available line UPH capacity based on ratio: 90 trolleys = 30 UPH
-    calculated_uph = round((current_operational / 90.0) * 30, 1)
-    uph_capacity.append(calculated_uph)
-
-# 3. Weekly Production Data Converted to UPH (45 hrs/week: 5 days * 9 hours)
-raw_production_up_to_cw8 = [49, 69, 123, 147, 184, 196, 0, 0, 176, 199, 223, 246, 206, 270, 281]
-production_uph_demand = [round(p / 45.0, 1) if p > 0 else 0.0 for p in raw_production_up_to_cw8]
-
-while len(production_uph_demand) < n_weeks:
-    production_uph_demand.append(None)
-
-df = pd.DataFrame({
-    "Week": weeks,
-    "Physical": phys_stock,
-    "Operational": op_stock,
-    "UPH_Capacity": uph_capacity,
-    "Prod_UPH_Demand": production_uph_demand
+df_report = pd.DataFrame({
+    "Date": dates,
+    "CalendarWeek": calendar_weeks,
+    "Centroid_X": centroid_x,
+    "Centroid_Y": centroid_y,
+    "Magnitude": magnitude_r,
+    "Status": status,
 })
 
-# 4. Professional Matplotlib Figure with Dual Axes
-fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(14, 6.5), gridspec_kw={'height_ratios': [3, 0.7], 'hspace': 0.05}, sharex=True)
+# Agrupado semanal para tendencias
+df_weekly = (
+    df_report.groupby("CalendarWeek")
+    .agg(
+        Mean_X=("Centroid_X", "mean"),
+        Mean_Y=("Centroid_Y", "mean"),
+        Mean_Mag=("Magnitude", "mean"),
+        Fail_Rate=(
+            "Status",
+            lambda x: (sum(x == "FAIL") / len(x)) * 100,
+        ),
+    )
+    .reset_index()
+)
 
-x = np.arange(n_weeks)
-width = 0.65
+# ---------------------------------------------------------
+# 2. DISEÑO DEL ONE-PAGER (Matplotlib GridSpec)
+# ---------------------------------------------------------
+fig = plt.figure(figsize=(14, 9), constrained_layout=True)
+fig.patch.set_facecolor("#f8fafc")  # Fondo gris muy suave profesional
+gs = gridspec.GridSpec(3, 3, figure=fig)
 
-# --- TOP CHART: PRIMARY AXIS (TROLLEYS BARS) ---
-ax1.bar(x, df["Operational"], width, label='Operational Available Trolleys', color='#1F4E79')
-ax1.bar(x, df["Physical"] - df["Operational"], width, bottom=df["Operational"], 
-        label='Pending Adjustment', color='#D9E1F2', alpha=0.8)
+# Estilo global
+plt.style.use("seaborn-v0_8-whitegrid" if "seaborn-v0_8-whitegrid" in plt.style.available else "default")
+primary_color = "#0f766e"  # Teal industrial
+accent_color = "#e11d48"   # Rojo alerta
+neutral_dark = "#1e293b"
 
-ax1.set_ylabel('Available Trolleys', fontsize=11, fontweight='bold', color='#1F4E79')
-ax1.set_title('Trolley Availability & Trolley Capacity vs. Production Demand (Up to CW8)', fontsize=13, fontweight='bold', pad=15, color='#1F4E79')
-ax1.set_xticks(x)
-ax1.set_xticklabels(weeks, rotation=45, ha='right', fontsize=9)
+# --- TÍTULO Y ENCABEZADO ---
+ax_title = fig.add_subplot(gs[0, :])
+ax_title.axis("off")
+ax_title.text(
+    0.0,
+    0.7,
+    "AUTOMATED CONVEYOR SYSTEM: LONGITUDINAL & LATERAL DRIFT REPORT",
+    fontsize=16,
+    weight="bold",
+    color=neutral_dark,
+)
+ax_title.text(
+    0.0,
+    0.3,
+    "Analysis Window: June 2026 – August 2026 (CW23 to CW34) | Plant Operations & Quality Control",
+    fontsize=10,
+    color="#64748b",
+)
+ax_title.axhline(0, color="#cbd5e1", linewidth=1.5)
 
-ax1.spines['top'].set_visible(False)
-ax1.spines['right'].set_visible(False)
-ax1.spines['left'].set_color('#BFBFBF')
-ax1.spines['bottom'].set_color('#BFBFBF')
-ax1.grid(axis='y', linestyle='--', alpha=0.4)
+# --- GRÁFICA 1: TENDENCIA TEMPORAL DE CENTROIDES (X e Y) ---
+ax1 = fig.add_subplot(gs[1, :2])
+ax1.plot(
+    df_report["Date"],
+    df_report["Centroid_X"],
+    color="#0284c7",
+    alpha=0.6,
+    label="Centroid X (Longitudinal)",
+)
+ax1.plot(
+    df_report["Date"],
+    df_report["Centroid_Y"],
+    color="#d97706",
+    alpha=0.6,
+    label="Centroid Y (Lateral)",
+)
+ax1.axhline(0, color="gray", linestyle="--", alpha=0.7)
+ax1.set_title(
+    "Temporal Drift Evolution (Daily Scatter)",
+    fontsize=11,
+    weight="bold",
+    color=neutral_dark,
+)
+ax1.set_ylabel("Deviation [mm]", fontsize=9)
+ax1.legend(loc="upper left", frameon=True, facecolor="white", fontsize=8)
+ax1.tick_params(axis="both", labelsize=8)
 
-ax1.set_ylim(0, 96)
-ax1.set_yticks(range(0, 91, 10))
+# --- GRÁFICA 2: MAGNITUD DE ERROR PROMEDIO SEMANAL ---
+ax2 = fig.add_subplot(gs[1, 2])
+ax2.bar(
+    df_weekly["CalendarWeek"],
+    df_weekly["Mean_Mag"],
+    color=primary_color,
+    alpha=0.85,
+)
+ax2.axhline(
+    3.0,
+    color=accent_color,
+    linestyle=":",
+    linewidth=2,
+    label="Tolerance Limit (3mm)",
+)
+ax2.set_title(
+    "Weekly Mean Error Magnitude (R)",
+    fontsize=11,
+    weight="bold",
+    color=neutral_dark,
+)
+ax2.set_ylabel("Mean Magnitude [mm]", fontsize=9)
+ax2.tick_params(axis="x", rotation=45, labelsize=7)
+ax2.tick_params(axis="y", labelsize=8)
+ax2.legend(loc="upper right", fontsize=7)
 
-# Annotate trolley numbers on top of bars
-for i, v in enumerate(df["Operational"]):
-    ax1.text(i, v + 0.8, str(v), ha='center', va='bottom', fontsize=7.5, fontweight='semibold', color='#333333')
+# --- GRÁFICA 3: MAPA DE DISPERSIÓN ESPACIAL (X vs Y) Y CAMBIO DE FASE ---
+ax3 = fig.add_subplot(gs[2, :2])
+scatter = ax3.scatter(
+    df_report["Centroid_X"],
+    df_report["Centroid_Y"],
+    c=pd.to_datetime(df_report["Date"]).astype(int),
+    cmap="viridis",
+    s=35,
+    alpha=0.8,
+    edgecolors="w",
+    linewidth=0.5,
+)
+ax3.axhline(0, color="gray", linestyle="--", alpha=0.5)
+ax3.axvline(0, color="gray", linestyle="--", alpha=0.5)
+ax3.set_title(
+    "Spatial Phase Shift (Color = Time Progression: June ➔ August)",
+    fontsize=11,
+    weight="bold",
+    color=neutral_dark,
+)
+ax3.set_xlabel("Mean X Deviation [mm] (-X Front / +X Back)", fontsize=9)
+ax3.set_ylabel("Mean Y Deviation [mm] (-Y Left / +Y Right)", fontsize=9)
+cbar = plt.colorbar(scatter, ax=ax3, orientation="horizontal", pad=0.18, aspect=40)
+cbar.set_label("Timeline Progression (June to August)", fontsize=8)
+cbar.ax.tick_params(labelsize=7)
+ax3.tick_params(axis="both", labelsize=8)
 
+# --- CAJA DE TEXTO: RESUMEN EJECUTIVO Y TENDENCIAS ---
+ax_text = fig.add_subplot(gs[2, 2])
+ax_text.axis("off")
 
-# --- TOP CHART: SECONDARY AXIS (TROLLEY CAPACITY LINE & PRODUCTION DEMAND LINE) ---
-coral_color = '#D96852'
-prod_line_color = '#27AE60'  # Green line for production UPH demand
+summary_text = (
+    "EXECUTIVE ENGINEERING INSIGHTS:\n\n"
+    "• Systematic Longitudinal Bias:\n"
+    "  Centroid X consistently holds a negative offset\n"
+    "  (-3mm to -8mm), indicating a repetitive\n"
+    "  mechanical stop or pneumatic dwell timing error.\n\n"
+    "• August Lateral Phase Shift:\n"
+    "  Centroid Y shifts aggressively toward positive\n"
+    "  values (+1mm to +3mm) starting in CW31–CW34.\n"
+    "  This points to thermal expansion of fixtures or\n"
+    "  wear on side-guide rollers during peak heat.\n\n"
+    "• Action Plan:\n"
+    "  1. Recalibrate pneumatic stoppers on line 2.\n"
+    "  2. Inspect roller guide clearances for thermal drift."
+)
 
-ax_uph = ax1.twinx()
+ax_text.text(
+    0.0,
+    1.0,
+    summary_text,
+    fontsize=9,
+    verticalalignment="top",
+    horizontalalignment="left",
+    family="monospace",
+    bbox=dict(
+        boxstyle="round,pad=0.6",
+        facecolor="#ffffff",
+        edgecolor="#cbd5e1",
+        linewidth=1,
+    ),
+)
 
-# Line 1: Trolley-Based Capacity (UPH)
-ax_uph.plot(x, df["UPH_Capacity"], color=coral_color, marker='o', linewidth=2.0, markersize=4.5, label='Trolley-Based Capacity (UPH)')
-
-# Annotate UPH values tightly below each point on the orange line
-for i, uph in enumerate(df["UPH_Capacity"]):
-    ax_uph.text(i, uph - 0.8, f"{uph}", ha='center', va='top', fontsize=6.5, fontweight='bold', color=coral_color)
-
-# Line 2: Production Demand (UPH)
-ax_uph.plot(x, df["Prod_UPH_Demand"], color=prod_line_color, marker='s', linewidth=2.2, markersize=5, label='Production Demand (UPH)')
-
-ax_uph.set_ylabel('Trolley Capacity & Demand (UPH)', fontsize=11, fontweight='bold', color=coral_color)
-ax_uph.tick_params(axis='y', labelcolor=coral_color)
-ax_uph.set_ylim(0, 35)
-ax_uph.spines['top'].set_visible(False)
-ax_uph.spines['left'].set_visible(False)
-ax_uph.spines['right'].set_color(coral_color)
-ax_uph.grid(False)
-
-# Annotate Production UPH values near markers up to CW8
-for i, val in enumerate(df["Prod_UPH_Demand"]):
-    if val is not None and val > 0:
-        ax_uph.text(i, val + 1.2, f"{val}", ha='center', va='bottom', fontsize=6.5, fontweight='bold', color=prod_line_color)
-
-# Combine legends cleanly on top left
-lines_1, labels_1 = ax1.get_legend_handles_labels()
-lines_2, labels_2 = ax_uph.get_legend_handles_labels()
-ax1.legend(lines_1 + lines_2, labels_1 + labels_2, frameon=False, loc='upper left', fontsize=8.5)
-
-
-# --- BOTTOM TRACKER: TIMELINE MILESTONES (Batch and Customs only) ---
-# Rotated vertical label for Additional Shipments (rotation=90) to match the provided layout reference exactly
-ax2.set_ylabel('Additional Shipments', fontsize=10, fontweight='bold', color='#1F4E79', rotation=90, labelpad=20, va='center')
-
-# Row 1: Batch 1
-ax2.barh(y=1, width=4, left=1, height=0.5, color='#FFF2CC', edgecolor='#D6B656', hatch='//')
-ax2.text(3, 1, 'BATCH 1 Shipment +24', ha='center', va='center', fontsize=7.5, fontweight='bold', color='#7F6000')
-
-ax2.barh(y=1, width=2, left=5, height=0.5, color='#FFE599', edgecolor='#D6B656')
-ax2.text(6, 1, 'CUSTOMS', ha='center', va='center', fontsize=7, fontweight='bold', color='#7F6000')
-
-# Row 2: Batch 2
-ax2.barh(y=0, width=4, left=8, height=0.5, color='#FFF2CC', edgecolor='#D6B656', hatch='//')
-ax2.text(10, 0, 'BATCH 2 Shipment +30', ha='center', va='center', fontsize=7.5, fontweight='bold', color='#7F6000')
-
-ax2.barh(y=0, width=2, left=12, height=0.5, color='#FFE599', edgecolor='#D6B656')
-ax2.text(13, 0, 'CUSTOMS', ha='center', va='center', fontsize=7, fontweight='bold', color='#7F6000')
-
-# Styling bottom timeline tracker
-ax2.set_yticks([])
-ax2.set_xlim(-0.5, n_weeks - 0.5)
-ax2.set_ylim(-0.5, 1.5)
-ax2.spines['top'].set_visible(False)
-ax2.spines['right'].set_visible(False)
-ax2.spines['left'].set_visible(False)
-ax2.spines['bottom'].set_color('#BFBFBF')
-ax2.grid(axis='x', linestyle=':', alpha=0.5)
-
-plt.tight_layout()
-
-# 4. Render in Streamlit
-st.pyplot(fig)
-plt.close(fig)
-
-col1, col2, col3, col4 = st.columns(4)
-with col1:
-    st.metric(label="Base Fleet", value="35 Units (11.7 UPH)")
-with col2:
-    st.metric(label="Peak Production (CW8)", value="281 Units (6.2 UPH)")
-with col3:
-    st.metric(label="Trolley Capacity at CW8", value="16.3 UPH")
-with col4:
-    st.metric(label="Capacity Margin", value="Clear Superiority (+10.1 UPH)")
+# Guardar imagen de alta calidad
+plt.savefig(
+    "Quality_Drift_OnePager.png",
+    dpi=300,
+    bbox_inches="tight",
+    facecolor=fig.get_facecolor(),
+)
+plt.show()
+print("¡Reporte One-Pager generado y guardado exitosamente como 'Quality_Drift_OnePager.png'!")
