@@ -1,5 +1,7 @@
 import streamlit as st
 import pandas as pd
+import numpy as np
+import re
 import plotly.express as px
 import plotly.graph_objects as go
 from openpyxl import load_workbook
@@ -158,7 +160,6 @@ def compute_fallback_summary(df):
 # HELPERS
 # ============================================================
 def fmt_num(v):
-    """Format numeric cell: blank if NaN/None, integer without decimals if whole number."""
     if v is None:
         return ""
     if isinstance(v, float):
@@ -168,6 +169,10 @@ def fmt_num(v):
             return str(int(v))
         return f"{v:.1f}"
     return str(v)
+
+def parse_week_number(w):
+    m = re.search(r"(\\d+)", str(w))
+    return int(m.group(1)) if m else None
 
 # ============================================================
 # EXECUTIVE SUMMARY VISUAL COMPONENTS
@@ -231,7 +236,7 @@ def render_element_table(df_elem):
     html += "</table>"
     st.markdown(html, unsafe_allow_html=True)
 
-def render_burndown_chart(df_week, title_suffix=""):
+def render_burndown_chart(df_week):
     fig = go.Figure()
     fig.add_trace(go.Scatter(x=df_week["Week"], y=df_week["Closed"], name="Closed", mode="lines",
                               stackgroup="one", fillcolor="rgba(46,139,87,0.75)", line=dict(color="#2e8b57")))
@@ -240,14 +245,13 @@ def render_burndown_chart(df_week, title_suffix=""):
     fig.add_trace(go.Scatter(x=df_week["Week"], y=df_week["Open"], name="Open", mode="lines",
                               stackgroup="one", fillcolor="rgba(176,58,46,0.75)", line=dict(color="#b03a2e")))
     fig.update_layout(
-        title=f"Defect Status Trend & Burndown per Calendar Week{title_suffix}",
+        title="Defect Status Trend & Burndown per Calendar Week",
         xaxis_title="Week", yaxis_title="Count",
         legend=dict(orientation="h", y=-0.2), height=430
     )
     st.plotly_chart(fig, use_container_width=True)
 
 def render_category_table(df_cat):
-    """Renders the Category summary table with the same contrast-friendly style."""
     html = "<table style='width:100%; border-collapse:collapse; text-align:center; border:1px solid #c9ced6;'>"
     html += "<tr>" + "".join(
         f"<th style='background-color:#1f2c4c;color:#ffffff;padding:8px;border:1px solid #c9ced6;font-weight:600;'>{c}</th>"
@@ -266,6 +270,98 @@ def render_category_table(df_cat):
         html += "</tr>"
     html += "</table>"
     st.markdown(html, unsafe_allow_html=True)
+
+# ============================================================
+# FORECAST LOGIC
+# ============================================================
+def compute_forecast(df_week, method="auto", manual_rate=None):
+    """
+    Projects the burndown forward assuming no new defects are raised.
+    Returns: (df_actual_with_weeknum, df_forecast_or_None, weeks_needed_or_None, rate)
+    """
+    df_w = df_week.copy()
+    df_w["WeekNum"] = df_w["Week"].apply(parse_week_number)
+    df_w = df_w.dropna(subset=["WeekNum"]).sort_values("WeekNum").reset_index(drop=True)
+    if df_w.empty or len(df_w) < 2:
+        return df_w, None, None, None
+
+    last_row = df_w.iloc[-1]
+    backlog = last_row["Open"] + last_row["Confirmation Pending"]
+    total = backlog + last_row["Closed"]
+
+    if backlog <= 0:
+        return df_w, None, 0, None
+
+    if method == "manual" and manual_rate is not None:
+        rate = manual_rate
+    else:
+        x = df_w["WeekNum"].values.astype(float)
+        y = df_w["Closed"].values.astype(float)
+        slope, _ = np.polyfit(x, y, 1)
+        rate = slope
+
+    if rate is None or rate <= 0:
+        return df_w, None, None, rate
+
+    weeks_needed = int(np.ceil(backlog / rate))
+    open_ratio = last_row["Open"] / backlog if backlog > 0 else 0
+    pending_ratio = last_row["Confirmation Pending"] / backlog if backlog > 0 else 0
+    last_week_num = int(last_row["WeekNum"])
+
+    forecast_rows = []
+    for i in range(1, weeks_needed + 1):
+        remaining_backlog = max(0.0, backlog - rate * i)
+        cum_closed = min(total, last_row["Closed"] + rate * i)
+        forecast_rows.append({
+            "Week": f"CW{last_week_num + i}",
+            "Closed": cum_closed,
+            "Confirmation Pending": remaining_backlog * pending_ratio,
+            "Open": remaining_backlog * open_ratio,
+        })
+    df_forecast = pd.DataFrame(forecast_rows)
+    return df_w, df_forecast, weeks_needed, rate
+
+def render_burndown_with_forecast(df_actual, df_forecast, weeks_needed):
+    fig = go.Figure()
+    # Actual (solid stacked areas)
+    fig.add_trace(go.Scatter(x=df_actual["Week"], y=df_actual["Closed"], name="Closed (Actual)", mode="lines",
+                              stackgroup="actual", fillcolor="rgba(46,139,87,0.75)", line=dict(color="#2e8b57")))
+    fig.add_trace(go.Scatter(x=df_actual["Week"], y=df_actual["Confirmation Pending"], name="Confirmation Pending (Actual)",
+                              mode="lines", stackgroup="actual", fillcolor="rgba(217,164,6,0.75)", line=dict(color="#d9a406")))
+    fig.add_trace(go.Scatter(x=df_actual["Week"], y=df_actual["Open"], name="Open (Actual)", mode="lines",
+                              stackgroup="actual", fillcolor="rgba(176,58,46,0.75)", line=dict(color="#b03a2e")))
+
+    # Bridge point so forecast lines connect visually with the last actual week
+    bridge = pd.DataFrame([{
+        "Week": df_actual["Week"].iloc[-1],
+        "Closed": df_actual["Closed"].iloc[-1],
+        "Confirmation Pending": df_actual["Confirmation Pending"].iloc[-1],
+        "Open": df_actual["Open"].iloc[-1],
+    }])
+    df_fc_plot = pd.concat([bridge, df_forecast], ignore_index=True)
+
+    fig.add_trace(go.Scatter(
+        x=df_fc_plot["Week"], y=df_fc_plot["Closed"],
+        name="Closed (Forecast)", mode="lines", line=dict(color="#2e8b57", dash="dash")
+    ))
+    fig.add_trace(go.Scatter(
+        x=df_fc_plot["Week"], y=df_fc_plot["Closed"] + df_fc_plot["Confirmation Pending"],
+        name="Closed + Pending (Forecast)", mode="lines", line=dict(color="#d9a406", dash="dash")
+    ))
+    fig.add_trace(go.Scatter(
+        x=df_fc_plot["Week"], y=df_fc_plot["Closed"] + df_fc_plot["Confirmation Pending"] + df_fc_plot["Open"],
+        name="Total Backlog (Forecast)", mode="lines", line=dict(color="#b03a2e", dash="dash")
+    ))
+
+    fig.add_vline(x=df_actual["Week"].iloc[-1], line_width=1, line_dash="dot", line_color="#888888")
+
+    title = "Defect Status Trend & Burndown per Calendar Week"
+    if weeks_needed:
+        title += f"  —  Projected full closure in ~{weeks_needed} more week(s)"
+
+    fig.update_layout(title=title, xaxis_title="Week", yaxis_title="Count",
+                       legend=dict(orientation="h", y=-0.3), height=460)
+    st.plotly_chart(fig, use_container_width=True)
 
 # ============================================================
 # SECTION 1: EXECUTIVE SUMMARY (main part)
@@ -287,7 +383,7 @@ if summary:
     if fallback_used:
         st.warning("The **Dashboard** sheet could not be found (or interpreted). "
                     "An equivalent summary was computed from the **Data** sheet instead. "
-                    "The weekly trend chart is not available in this mode.")
+                    "The weekly trend chart and forecast are not available in this mode.")
 
     c1, c2, c3 = st.columns(3)
     with c1: kpi_card("OPEN DEFECTS", summary.get("open", "N/A"), "#b03a2e")
@@ -312,6 +408,63 @@ if summary:
         else:
             st.info("The weekly trend (Burndown) chart requires the **Dashboard** sheet "
                     "with the weekly table (Week / Closed / Confirmation Pending / Open) from the original Excel file.")
+
+    # -------------------- CLOSURE FORECAST --------------------
+    st.markdown("---")
+    st.subheader("🔮 Closure Forecast")
+    st.caption("Projects how long it would take to close the remaining backlog, "
+               "assuming **no new defects are raised** and the closure pace stays constant.")
+
+    if summary.get("week_table") is not None:
+        show_forecast = st.checkbox("Show closure forecast", value=False)
+
+        if show_forecast:
+            method_label = st.radio(
+                "Forecast method",
+                ["Automatic (based on historical closure trend)", "Manual (enter a weekly closure rate)"],
+                horizontal=True
+            )
+            manual_rate = None
+            if method_label.startswith("Manual"):
+                manual_rate = st.number_input(
+                    "Estimated defects closed per week", min_value=0.0, value=10.0, step=1.0
+                )
+
+            df_actual, df_forecast, weeks_needed, rate = compute_forecast(
+                summary["week_table"],
+                method="manual" if manual_rate else "auto",
+                manual_rate=manual_rate
+            )
+
+            if weeks_needed == 0:
+                st.success("✅ The backlog is already at zero — there is nothing left to close.")
+                render_burndown_chart(summary["week_table"])
+            elif df_forecast is None:
+                st.warning(
+                    "⚠️ Based on the historical trend, the closure rate is zero or negative. "
+                    "At the current pace, the remaining backlog would not be resolved. "
+                    "Try the **Manual** option above to test a different weekly closure rate."
+                )
+                render_burndown_chart(summary["week_table"])
+            else:
+                last_actual = df_actual.iloc[-1]
+                remaining_backlog = int(last_actual["Open"] + last_actual["Confirmation Pending"])
+                projected_week = df_forecast["Week"].iloc[-1]
+
+                cf1, cf2, cf3 = st.columns(3)
+                with cf1: kpi_card("REMAINING BACKLOG", remaining_backlog, "#b03a2e")
+                with cf2: kpi_card("ESTIMATED WEEKS TO CLOSE", weeks_needed, "#9a6a06")
+                with cf3: kpi_card("PROJECTED CLOSURE WEEK", projected_week, "#1e7e45")
+
+                render_burndown_with_forecast(df_actual, df_forecast, weeks_needed)
+                st.caption(
+                    f"Closure rate used: **{rate:.1f} defects/week**. "
+                    "Dashed lines represent the projected scenario. The split between Open and "
+                    "Confirmation Pending in the forecast keeps the same proportion observed in the last actual week."
+                )
+    else:
+        st.info("The forecast requires the **Dashboard** sheet with the weekly table from the original Excel file.")
+
 else:
     st.error("Unable to generate the executive summary from this file. Please verify it contains "
               "a **Dashboard** sheet or a **Data** sheet with the required columns.")
@@ -417,7 +570,7 @@ with c4:
         st.plotly_chart(fig4, use_container_width=True)
 
 # ============================================================
-# CATEGORY ANALYSIS (new section)
+# CATEGORY ANALYSIS
 # ============================================================
 st.markdown("---")
 st.subheader("📂 Category Analysis")
