@@ -160,6 +160,7 @@ def compute_fallback_summary(df):
 # HELPERS
 # ============================================================
 def fmt_num(v):
+    """Format numeric cell: blank if NaN/None, integer without decimals if whole number."""
     if v is None:
         return ""
     if isinstance(v, float):
@@ -236,7 +237,7 @@ def render_element_table(df_elem):
     html += "</table>"
     st.markdown(html, unsafe_allow_html=True)
 
-def render_burndown_chart(df_week):
+def render_burndown_chart(df_week, key="burndown_default"):
     fig = go.Figure()
     fig.add_trace(go.Scatter(x=df_week["Week"], y=df_week["Closed"], name="Closed", mode="lines",
                               stackgroup="one", fillcolor="rgba(46,139,87,0.75)", line=dict(color="#2e8b57")))
@@ -249,7 +250,7 @@ def render_burndown_chart(df_week):
         xaxis_title="Week", yaxis_title="Count",
         legend=dict(orientation="h", y=-0.2), height=430
     )
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, use_container_width=True, key=key)
 
 def render_category_table(df_cat):
     html = "<table style='width:100%; border-collapse:collapse; text-align:center; border:1px solid #c9ced6;'>"
@@ -321,7 +322,7 @@ def compute_forecast(df_week, method="auto", manual_rate=None):
     df_forecast = pd.DataFrame(forecast_rows)
     return df_w, df_forecast, weeks_needed, rate
 
-def render_burndown_with_forecast(df_actual, df_forecast, weeks_needed):
+def render_burndown_with_forecast(df_actual, df_forecast, weeks_needed, key="burndown_forecast_default"):
     fig = go.Figure()
     # Actual (solid stacked areas)
     fig.add_trace(go.Scatter(x=df_actual["Week"], y=df_actual["Closed"], name="Closed (Actual)", mode="lines",
@@ -361,7 +362,7 @@ def render_burndown_with_forecast(df_actual, df_forecast, weeks_needed):
 
     fig.update_layout(title=title, xaxis_title="Week", yaxis_title="Count",
                        legend=dict(orientation="h", y=-0.3), height=460)
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, use_container_width=True, key=key)
 
 # ============================================================
 # SECTION 1: EXECUTIVE SUMMARY (main part)
@@ -373,8 +374,8 @@ summary = parse_dashboard_sheet(file_bytes, "Dashboard") if "Dashboard" in sheet
 
 fallback_used = False
 if summary is None:
-    default_sheet = "Data" if "Data" in sheet_names else sheet_names[0]
-    df_for_fallback = load_data(file_bytes, default_sheet)
+    default_sheet_fb = "Data" if "Data" in sheet_names else sheet_names[0]
+    df_for_fallback = load_data(file_bytes, default_sheet_fb)
     if all(c in df_for_fallback.columns for c in ["Type", "Status", "Severity"]):
         summary = compute_fallback_summary(df_for_fallback)
         fallback_used = True
@@ -404,7 +405,7 @@ if summary:
 
     with right:
         if summary.get("week_table") is not None:
-            render_burndown_chart(summary["week_table"])
+            render_burndown_chart(summary["week_table"], key="burndown_summary")
         else:
             st.info("The weekly trend (Burndown) chart requires the **Dashboard** sheet "
                     "with the weekly table (Week / Closed / Confirmation Pending / Open) from the original Excel file.")
@@ -438,14 +439,14 @@ if summary:
 
             if weeks_needed == 0:
                 st.success("✅ The backlog is already at zero — there is nothing left to close.")
-                render_burndown_chart(summary["week_table"])
+                render_burndown_chart(summary["week_table"], key="burndown_zero_backlog")
             elif df_forecast is None:
                 st.warning(
                     "⚠️ Based on the historical trend, the closure rate is zero or negative. "
                     "At the current pace, the remaining backlog would not be resolved. "
                     "Try the **Manual** option above to test a different weekly closure rate."
                 )
-                render_burndown_chart(summary["week_table"])
+                render_burndown_chart(summary["week_table"], key="burndown_no_forecast")
             else:
                 last_actual = df_actual.iloc[-1]
                 remaining_backlog = int(last_actual["Open"] + last_actual["Confirmation Pending"])
@@ -456,7 +457,7 @@ if summary:
                 with cf2: kpi_card("ESTIMATED WEEKS TO CLOSE", weeks_needed, "#9a6a06")
                 with cf3: kpi_card("PROJECTED CLOSURE WEEK", projected_week, "#1e7e45")
 
-                render_burndown_with_forecast(df_actual, df_forecast, weeks_needed)
+                render_burndown_with_forecast(df_actual, df_forecast, weeks_needed, key="burndown_forecast_active")
                 st.caption(
                     f"Closure rate used: **{rate:.1f} defects/week**. "
                     "Dashed lines represent the projected scenario. The split between Open and "
@@ -539,7 +540,7 @@ with c1:
     fig = px.pie(status_counts, names="Status", values="Count", hole=0.45,
                  color="Status", color_discrete_map=COLOR_STATUS)
     fig.update_traces(textinfo="percent+value")
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, use_container_width=True, key="status_distribution_pie")
 
 with c2:
     st.subheader("Severity Distribution")
@@ -549,7 +550,7 @@ with c2:
         fig2 = px.bar(sev_counts, x="Severity", y="Count", color="Severity",
                       text="Count", color_discrete_map=COLOR_SEV)
         fig2.update_layout(showlegend=False)
-        st.plotly_chart(fig2, use_container_width=True)
+        st.plotly_chart(fig2, use_container_width=True, key="severity_distribution_bar")
 
 c3, c4 = st.columns(2)
 with c3:
@@ -557,7 +558,7 @@ with c3:
     type_status = df_f.groupby(["Type", "Status"]).size().reset_index(name="Count")
     fig3 = px.bar(type_status, x="Type", y="Count", color="Status", barmode="stack",
                   color_discrete_map=COLOR_STATUS)
-    st.plotly_chart(fig3, use_container_width=True)
+    st.plotly_chart(fig3, use_container_width=True, key="status_by_type_bar")
 
 with c4:
     st.subheader("Top 15 Stations with Most Defects")
@@ -567,7 +568,7 @@ with c4:
         fig4 = px.bar(station_counts, x="Count", y="Station", orientation="h", text="Count",
                       color="Count", color_continuous_scale="Reds")
         fig4.update_layout(yaxis={"categoryorder": "total ascending"}, coloraxis_showscale=False)
-        st.plotly_chart(fig4, use_container_width=True)
+        st.plotly_chart(fig4, use_container_width=True, key="top_stations_bar")
 
 # ============================================================
 # CATEGORY ANALYSIS
@@ -620,7 +621,7 @@ if "Category" in df_f.columns and df_f["Category"].notna().any():
             color_discrete_sequence=["#2f3f5c", "#3a7ab0", "#8fa8c4", "#c9ced6"]
         )
         fig_donut.update_traces(textinfo="percent+value")
-        st.plotly_chart(fig_donut, use_container_width=True)
+        st.plotly_chart(fig_donut, use_container_width=True, key="category_donut")
 
         cat_status_melt = cat_summary.melt(
             id_vars="Category", value_vars=["Open", "Confirmation Pending", "Closed"],
@@ -631,7 +632,7 @@ if "Category" in df_f.columns and df_f["Category"].notna().any():
             title="Resolution Status by Category",
             color_discrete_map={"Open": "#b03a2e", "Confirmation Pending": "#d9a406", "Closed": "#1e7e45"}
         )
-        st.plotly_chart(fig_cat_status, use_container_width=True)
+        st.plotly_chart(fig_cat_status, use_container_width=True, key="category_status_bar")
 else:
     st.info("The Category column is not available or has no data in the current filtered selection.")
 
@@ -643,7 +644,7 @@ if "Responsible" in df_f.columns and df_f["Responsible"].notna().any():
     st.subheader("👷 Workload by Responsible")
     resp = df_f.dropna(subset=["Responsible"]).groupby(["Responsible", "Status"]).size().reset_index(name="Count")
     fig6 = px.bar(resp, x="Responsible", y="Count", color="Status", barmode="stack", color_discrete_map=COLOR_STATUS)
-    st.plotly_chart(fig6, use_container_width=True)
+    st.plotly_chart(fig6, use_container_width=True, key="workload_bar")
 
 st.markdown("---")
 st.subheader("📋 Record Details")
