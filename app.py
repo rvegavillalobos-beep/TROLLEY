@@ -26,6 +26,13 @@ st.title("📊 Defect Management Dashboard - Conveyors")
 st.caption("Upload your Excel file. All KPIs, tables and charts are calculated live from the **Data** sheet only.")
 
 # ============================================================
+# SIDEBAR - CACHE CONTROL (safety net)
+# ============================================================
+if st.sidebar.button("🔄 Clear cache & reload"):
+    st.cache_data.clear()
+    st.rerun()
+
+# ============================================================
 # FILE UPLOAD
 # ============================================================
 st.sidebar.header("📁 Upload File")
@@ -35,15 +42,18 @@ if uploaded_file is None:
     st.info("👆 Upload an Excel file from the sidebar to get started.")
     st.stop()
 
-file_bytes = uploaded_file.read()
+file_bytes = uploaded_file.getvalue()
+
+# ---- FIX: parameters no longer start with "_", so Streamlit correctly
+# includes the file content in the cache key. This ensures that every
+# time you upload a modified Excel file, the data is recalculated. ----
+@st.cache_data
+def get_sheet_names(file_bytes):
+    return pd.ExcelFile(io.BytesIO(file_bytes)).sheet_names
 
 @st.cache_data
-def get_sheet_names(_bytes):
-    return pd.ExcelFile(io.BytesIO(_bytes)).sheet_names
-
-@st.cache_data
-def load_data(_bytes, sheet_name):
-    df = pd.read_excel(io.BytesIO(_bytes), sheet_name=sheet_name)
+def load_data(file_bytes, sheet_name):
+    df = pd.read_excel(io.BytesIO(file_bytes), sheet_name=sheet_name)
     df.columns = [str(c).strip() for c in df.columns]
     for col in ["Date Open", "Date Closed"]:
         if col in df.columns:
