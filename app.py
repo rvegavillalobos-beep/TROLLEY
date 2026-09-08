@@ -183,7 +183,8 @@ def compute_dynamic_burndown(df, forecast_periods=6):
         "Date": checkpoints, "Open": open_arr,
         "Confirmation Pending": pending_arr, "Closed": closed_arr
     })
-    hist["Week"] = hist["Date"].apply(lambda d: f"{d.isocalendar()[0]}-CW{d.isocalendar()[1]:02d}")
+    # ---- CHANGE: week label without the year, only "CWxx" ----
+    hist["Week"] = hist["Date"].apply(lambda d: f"CW{d.isocalendar()[1]:02d}")
 
     total_defects = len(data)
     forecast_df = pd.DataFrame(columns=hist.columns)
@@ -211,39 +212,84 @@ def compute_dynamic_burndown(df, forecast_periods=6):
                 "Open": remaining * open_share,
                 "Confirmation Pending": remaining * pending_share,
                 "Closed": f_closed,
-                "Week": f"{f_date.isocalendar()[0]}-CW{f_date.isocalendar()[1]:02d}"
+                # ---- CHANGE: week label without the year, only "CWxx" ----
+                "Week": f"CW{f_date.isocalendar()[1]:02d}"
             })
         forecast_df = pd.DataFrame(rows)
 
     return hist, forecast_df, total_defects
 
+
 def render_dynamic_burndown_chart(hist, forecast_df):
     fig = go.Figure()
 
-    fig.add_trace(go.Scatter(x=hist["Week"], y=hist["Closed"], name="Closed (actual)", mode="lines",
-                              stackgroup="actual", fillcolor="rgba(46,139,87,0.75)", line=dict(color="#2e8b57")))
-    fig.add_trace(go.Scatter(x=hist["Week"], y=hist["Confirmation Pending"], name="Confirmation Pending (actual)",
-                              mode="lines", stackgroup="actual", fillcolor="rgba(217,164,6,0.75)", line=dict(color="#d9a406")))
-    fig.add_trace(go.Scatter(x=hist["Week"], y=hist["Open"], name="Open (actual)", mode="lines",
-                              stackgroup="actual", fillcolor="rgba(176,58,46,0.75)", line=dict(color="#b03a2e")))
+    # ---- Actual data (solid areas) - these are the only 3 entries kept in the legend ----
+    fig.add_trace(go.Scatter(
+        x=hist["Week"], y=hist["Closed"], name="Closed", legendgroup="Closed",
+        mode="lines", stackgroup="actual",
+        fillcolor="rgba(46,139,87,0.75)", line=dict(color="#2e8b57")
+    ))
+    fig.add_trace(go.Scatter(
+        x=hist["Week"], y=hist["Confirmation Pending"], name="Confirmation Pending", legendgroup="Pending",
+        mode="lines", stackgroup="actual",
+        fillcolor="rgba(217,164,6,0.75)", line=dict(color="#d9a406")
+    ))
+    fig.add_trace(go.Scatter(
+        x=hist["Week"], y=hist["Open"], name="Open", legendgroup="Open",
+        mode="lines", stackgroup="actual",
+        fillcolor="rgba(176,58,46,0.75)", line=dict(color="#b03a2e")
+    ))
 
     if forecast_df is not None and not forecast_df.empty:
         last_row = hist.iloc[[-1]][["Week", "Open", "Confirmation Pending", "Closed"]]
-        connect_df = pd.concat([last_row, forecast_df[["Week", "Open", "Confirmation Pending", "Closed"]]], ignore_index=True)
+        connect_df = pd.concat(
+            [last_row, forecast_df[["Week", "Open", "Confirmation Pending", "Closed"]]],
+            ignore_index=True
+        )
+        forecast_start_week = last_row["Week"].values[0]
 
-        fig.add_trace(go.Scatter(x=connect_df["Week"], y=connect_df["Closed"], name="Closed (forecast)", mode="lines",
-                                  stackgroup="forecast", fillcolor="rgba(46,139,87,0.25)", line=dict(color="#2e8b57", dash="dash")))
-        fig.add_trace(go.Scatter(x=connect_df["Week"], y=connect_df["Confirmation Pending"], name="Confirmation Pending (forecast)",
-                                  mode="lines", stackgroup="forecast", fillcolor="rgba(217,164,6,0.25)", line=dict(color="#d9a406", dash="dash")))
-        fig.add_trace(go.Scatter(x=connect_df["Week"], y=connect_df["Open"], name="Open (forecast)", mode="lines",
-                                  stackgroup="forecast", fillcolor="rgba(176,58,46,0.25)", line=dict(color="#b03a2e", dash="dash")))
+        # ---- Forecast data (dashed, lighter areas) - hidden from legend (showlegend=False) ----
+        fig.add_trace(go.Scatter(
+            x=connect_df["Week"], y=connect_df["Closed"], name="Closed", legendgroup="Closed",
+            showlegend=False, mode="lines", stackgroup="forecast",
+            fillcolor="rgba(46,139,87,0.25)", line=dict(color="#2e8b57", dash="dash")
+        ))
+        fig.add_trace(go.Scatter(
+            x=connect_df["Week"], y=connect_df["Confirmation Pending"], name="Confirmation Pending",
+            legendgroup="Pending", showlegend=False, mode="lines", stackgroup="forecast",
+            fillcolor="rgba(217,164,6,0.25)", line=dict(color="#d9a406", dash="dash")
+        ))
+        fig.add_trace(go.Scatter(
+            x=connect_df["Week"], y=connect_df["Open"], name="Open", legendgroup="Open",
+            showlegend=False, mode="lines", stackgroup="forecast",
+            fillcolor="rgba(176,58,46,0.25)", line=dict(color="#b03a2e", dash="dash")
+        ))
+
+        # ---- Vertical separator marking where the forecast begins ----
+        fig.add_shape(
+            type="line", xref="x", yref="paper",
+            x0=forecast_start_week, x1=forecast_start_week, y0=0, y1=1,
+            line=dict(color="#8a94a6", width=1, dash="dot")
+        )
+
+        # ---- "FORECAST" label placed directly inside the forecast area (no legend clutter) ----
+        forecast_weeks_list = connect_df["Week"].tolist()
+        mid_week = forecast_weeks_list[len(forecast_weeks_list) // 2]
+        fig.add_annotation(
+            x=mid_week, y=0.92, xref="x", yref="paper",
+            text="FORECAST", showarrow=False,
+            font=dict(size=13, color="#5a6474"),
+            bgcolor="rgba(255,255,255,0.75)",
+            bordercolor="#c9ced6", borderwidth=1, borderpad=4
+        )
 
     fig.update_layout(
-        title="Defect Status Trend & Burndown per Calendar Week (Live from Data + Forecast)",
+        title="Defect Status Trend & Burndown per Calendar Week",
         xaxis_title="Week", yaxis_title="Count",
-        legend=dict(orientation="h", y=-0.25), height=460
+        legend=dict(orientation="h", y=-0.2), height=460
     )
     st.plotly_chart(fig, use_container_width=True)
+
 
 # ============================================================
 # VISUAL COMPONENTS (tables)
