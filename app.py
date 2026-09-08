@@ -44,9 +44,9 @@ if uploaded_file is None:
 
 file_bytes = uploaded_file.getvalue()
 
-# ---- FIX: parameters no longer start with "_", so Streamlit correctly
-# includes the file content in the cache key. This ensures that every
-# time you upload a modified Excel file, the data is recalculated. ----
+# NOTE: parameters do NOT start with "_", so Streamlit correctly includes
+# the file content in the cache key. This ensures that every time you
+# upload a modified Excel file, the data is recalculated (no stale cache).
 @st.cache_data
 def get_sheet_names(file_bytes):
     return pd.ExcelFile(io.BytesIO(file_bytes)).sheet_names
@@ -183,7 +183,7 @@ def compute_dynamic_burndown(df, forecast_periods=6):
         "Date": checkpoints, "Open": open_arr,
         "Confirmation Pending": pending_arr, "Closed": closed_arr
     })
-    # ---- CHANGE: week label without the year, only "CWxx" ----
+    # Week label shows only the calendar week number, no year (e.g. "CW24")
     hist["Week"] = hist["Date"].apply(lambda d: f"CW{d.isocalendar()[1]:02d}")
 
     total_defects = len(data)
@@ -212,13 +212,11 @@ def compute_dynamic_burndown(df, forecast_periods=6):
                 "Open": remaining * open_share,
                 "Confirmation Pending": remaining * pending_share,
                 "Closed": f_closed,
-                # ---- CHANGE: week label without the year, only "CWxx" ----
                 "Week": f"CW{f_date.isocalendar()[1]:02d}"
             })
         forecast_df = pd.DataFrame(rows)
 
     return hist, forecast_df, total_defects
-
 
 def render_dynamic_burndown_chart(hist, forecast_df):
     fig = go.Figure()
@@ -248,7 +246,7 @@ def render_dynamic_burndown_chart(hist, forecast_df):
         )
         forecast_start_week = last_row["Week"].values[0]
 
-        # ---- Forecast data (dashed, lighter areas) - hidden from legend (showlegend=False) ----
+        # ---- Forecast data (dashed, lighter areas) - hidden from legend to avoid clutter ----
         fig.add_trace(go.Scatter(
             x=connect_df["Week"], y=connect_df["Closed"], name="Closed", legendgroup="Closed",
             showlegend=False, mode="lines", stackgroup="forecast",
@@ -272,24 +270,24 @@ def render_dynamic_burndown_chart(hist, forecast_df):
             line=dict(color="#8a94a6", width=1, dash="dot")
         )
 
-        # ---- "FORECAST" label placed directly inside the forecast area (no legend clutter) ----
+        # ---- "FORECAST" label placed ABOVE the chart area (top margin), clear of all lines ----
         forecast_weeks_list = connect_df["Week"].tolist()
         mid_week = forecast_weeks_list[len(forecast_weeks_list) // 2]
         fig.add_annotation(
-            x=mid_week, y=0.92, xref="x", yref="paper",
+            x=mid_week, y=1.08, xref="x", yref="paper",
             text="FORECAST", showarrow=False,
-            font=dict(size=13, color="#5a6474"),
-            bgcolor="rgba(255,255,255,0.75)",
-            bordercolor="#c9ced6", borderwidth=1, borderpad=4
+            font=dict(size=15, color="#3d4552", family="Arial Black"),
+            bgcolor="rgba(255,255,255,0.9)",
+            bordercolor="#8a94a6", borderwidth=1, borderpad=6
         )
 
     fig.update_layout(
         title="Defect Status Trend & Burndown per Calendar Week",
         xaxis_title="Week", yaxis_title="Count",
-        legend=dict(orientation="h", y=-0.2), height=460
+        legend=dict(orientation="h", y=-0.2), height=460,
+        margin=dict(t=80)  # extra top margin so the FORECAST label has room above the chart
     )
     st.plotly_chart(fig, use_container_width=True)
-
 
 # ============================================================
 # VISUAL COMPONENTS (tables)
