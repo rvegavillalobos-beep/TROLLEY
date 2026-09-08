@@ -6,10 +6,10 @@ from openpyxl import load_workbook
 import io
 
 # ============================================================
-# CONFIGURACIÓN DE PÁGINA
+# PAGE CONFIG
 # ============================================================
 st.set_page_config(
-    page_title="Dashboard de Defectos - Transportadores",
+    page_title="Defect Management Dashboard - Conveyors",
     layout="wide",
     page_icon="📊"
 )
@@ -22,17 +22,17 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-st.title("📊 Dashboard de Gestión de Defectos - Transportadores")
-st.caption("Carga tu archivo Excel para visualizar el resumen ejecutivo y el análisis detallado.")
+st.title("📊 Defect Management Dashboard - Conveyors")
+st.caption("Upload your Excel file to view the executive summary and the detailed analysis.")
 
 # ============================================================
-# CARGA DE ARCHIVO
+# FILE UPLOAD
 # ============================================================
-st.sidebar.header("📁 Cargar archivo")
-uploaded_file = st.sidebar.file_uploader("Selecciona el archivo Excel (.xlsx)", type=["xlsx", "xls"])
+st.sidebar.header("📁 Upload File")
+uploaded_file = st.sidebar.file_uploader("Select the Excel file (.xlsx)", type=["xlsx", "xls"])
 
 if uploaded_file is None:
-    st.info("👆 Carga un archivo Excel desde la barra lateral para comenzar.")
+    st.info("👆 Upload an Excel file from the sidebar to get started.")
     st.stop()
 
 file_bytes = uploaded_file.read()
@@ -51,7 +51,7 @@ def load_data(_bytes, sheet_name):
     return df
 
 # ============================================================
-# LECTURA DEL RESUMEN EJECUTIVO (pestaña "Dashboard")
+# READ EXECUTIVE SUMMARY ("Dashboard" sheet)
 # ============================================================
 def find_cell(ws, target):
     target = str(target).strip().lower()
@@ -155,48 +155,80 @@ def compute_fallback_summary(df):
             "severity_table": df_sev, "element_table": df_elem, "week_table": None}
 
 # ============================================================
-# COMPONENTES VISUALES DEL RESUMEN EJECUTIVO
+# HELPERS
+# ============================================================
+def fmt_num(v):
+    """Format numeric cell: blank if NaN/None, integer without decimals if whole number."""
+    if v is None:
+        return ""
+    if isinstance(v, float):
+        if pd.isna(v):
+            return ""
+        if v.is_integer():
+            return str(int(v))
+        return f"{v:.1f}"
+    return str(v)
+
+# ============================================================
+# EXECUTIVE SUMMARY VISUAL COMPONENTS (revised color scheme for contrast)
 # ============================================================
 def kpi_card(title, value, color):
     st.markdown(f"""
-    <div style="border:1px solid #ccc; border-radius:6px; padding:15px; text-align:center; background-color:#fafafa;">
-        <div style="font-size:13px; color:#555; font-weight:600; letter-spacing:1px;">{title}</div>
+    <div style="border:1px solid #d0d5dc; border-radius:6px; padding:15px; text-align:center; background-color:#f8f9fb;">
+        <div style="font-size:13px; color:#5a6474; font-weight:600; letter-spacing:1px;">{title}</div>
         <div style="font-size:36px; font-weight:bold; color:{color};">{value}</div>
     </div>
     """, unsafe_allow_html=True)
 
+# Softer, darker status colors for good contrast on light cell backgrounds
+STATUS_TEXT_COLOR = {
+    "Open": "#b03a2e",
+    "Confirmation Pending": "#9a6a06",
+    "Closed": "#1e7e45",
+    "Total": "#1f2c4c"
+}
+
 def render_severity_table(df_sev):
-    row_colors = {"Open": "#e74c3c", "Confirmation Pending": "#f39c12", "Closed": "#2ecc71", "Total": "#1f2c4c"}
-    html = "<table style='width:100%; border-collapse:collapse; text-align:center;'>"
+    html = "<table style='width:100%; border-collapse:collapse; text-align:center; border:1px solid #c9ced6;'>"
+    # Header row
     html += "<tr>" + "".join(
-        f"<th style='background-color:#1f2c4c;color:white;padding:6px;border:1px solid #ddd;'>{c}</th>"
+        f"<th style='background-color:#1f2c4c;color:#ffffff;padding:8px;border:1px solid #c9ced6;font-weight:600;'>{c}</th>"
         for c in df_sev.columns) + "</tr>"
-    for _, row in df_sev.iterrows():
-        html += "<tr>"
+    for idx, row in df_sev.iterrows():
+        bg = "#f4f6f9" if idx % 2 == 0 else "#ffffff"
+        html += f"<tr style='background-color:{bg};'>"
         for i, val in enumerate(row):
             col = df_sev.columns[i]
-            color = row_colors.get(str(val), "#2c3e50") if col == "Status/Severity" else "#2c3e50"
-            weight = "700" if col == "Status/Severity" else "500"
-            html += f"<td style='padding:6px;border:1px solid #ddd;color:{color};font-weight:{weight};'>{val}</td>"
+            if col == "Status/Severity":
+                color = STATUS_TEXT_COLOR.get(str(val).strip(), "#2c3e50")
+                weight = "700"
+                display_val = val
+            else:
+                color = "#2c3e50"
+                weight = "700" if str(row["Status/Severity"]).strip() == "Total" else "500"
+                display_val = fmt_num(val)
+            html += f"<td style='padding:8px;border:1px solid #c9ced6;color:{color};font-weight:{weight};'>{display_val}</td>"
         html += "</tr>"
     html += "</table>"
     st.markdown(html, unsafe_allow_html=True)
 
 def render_element_table(df_elem):
-    html = "<table style='width:100%; border-collapse:collapse; text-align:center;'>"
-    html += ("<tr><th style='background-color:#1f2c4c;color:white;padding:6px;border:1px solid #ddd;'>Element Type</th>"
-              "<th colspan='3' style='background-color:#34495e;color:white;padding:6px;border:1px solid #ddd;'>STATUS BREAKDOWN</th>"
-              "<th colspan='3' style='background-color:#34495e;color:white;padding:6px;border:1px solid #ddd;'>SEVERITY BREAKDOWN</th></tr>")
-    html += "<tr><th style='padding:6px;border:1px solid #ddd;'></th>"
+    html = "<table style='width:100%; border-collapse:collapse; text-align:center; border:1px solid #c9ced6;'>"
+    html += ("<tr><th style='background-color:#1f2c4c;color:#ffffff;padding:8px;border:1px solid #c9ced6;font-weight:600;'>Element Type</th>"
+              "<th colspan='3' style='background-color:#2f3f5c;color:#ffffff;padding:8px;border:1px solid #c9ced6;font-weight:600;'>STATUS BREAKDOWN</th>"
+              "<th colspan='3' style='background-color:#2f3f5c;color:#ffffff;padding:8px;border:1px solid #c9ced6;font-weight:600;'>SEVERITY BREAKDOWN</th></tr>")
+    html += "<tr><th style='padding:8px;border:1px solid #c9ced6;background-color:#e4e8ee;'></th>"
     for c in ["Open", "Closed", "Pending", "Minor", "Major", "Critical"]:
-        html += f"<th style='padding:6px;border:1px solid #ddd;background-color:#ecf0f1;'>{c}</th>"
+        html += f"<th style='padding:8px;border:1px solid #c9ced6;background-color:#e4e8ee;color:#1f2c4c;font-weight:600;'>{c}</th>"
     html += "</tr>"
-    for _, row in df_elem.iterrows():
+    for idx, row in df_elem.iterrows():
         is_total = str(row["Element Type"]).strip().upper() == "TOTAL"
+        bg = "#eef1f6" if is_total else ("#f4f6f9" if idx % 2 == 0 else "#ffffff")
         w = "700" if is_total else "500"
-        html += f"<tr><td style='padding:6px;border:1px solid #ddd;font-weight:{w};color:#2c3e50;'>{row['Element Type']}</td>"
+        html += f"<tr style='background-color:{bg};'>"
+        html += f"<td style='padding:8px;border:1px solid #c9ced6;font-weight:{w};color:#1f2c4c;text-align:left;padding-left:12px;'>{row['Element Type']}</td>"
         for c in ["Open", "Closed", "Pending", "Minor", "Major", "Critical"]:
-            html += f"<td style='padding:6px;border:1px solid #ddd;font-weight:{w};'>{row[c]}</td>"
+            html += f"<td style='padding:8px;border:1px solid #c9ced6;font-weight:{w};color:#2c3e50;'>{fmt_num(row[c])}</td>"
         html += "</tr>"
     html += "</table>"
     st.markdown(html, unsafe_allow_html=True)
@@ -204,11 +236,11 @@ def render_element_table(df_elem):
 def render_burndown_chart(df_week, title_suffix=""):
     fig = go.Figure()
     fig.add_trace(go.Scatter(x=df_week["Week"], y=df_week["Closed"], name="Closed", mode="lines",
-                              stackgroup="one", fillcolor="rgba(46,204,113,0.85)", line=dict(color="#2ecc71")))
+                              stackgroup="one", fillcolor="rgba(46,139,87,0.75)", line=dict(color="#2e8b57")))
     fig.add_trace(go.Scatter(x=df_week["Week"], y=df_week["Confirmation Pending"], name="Confirmation Pending",
-                              mode="lines", stackgroup="one", fillcolor="rgba(243,156,18,0.85)", line=dict(color="#f39c12")))
+                              mode="lines", stackgroup="one", fillcolor="rgba(217,164,6,0.75)", line=dict(color="#d9a406")))
     fig.add_trace(go.Scatter(x=df_week["Week"], y=df_week["Open"], name="Open", mode="lines",
-                              stackgroup="one", fillcolor="rgba(231,76,60,0.85)", line=dict(color="#e74c3c")))
+                              stackgroup="one", fillcolor="rgba(176,58,46,0.75)", line=dict(color="#b03a2e")))
     fig.update_layout(
         title=f"Defect Status Trend & Burndown per Calendar Week{title_suffix}",
         xaxis_title="Week", yaxis_title="Count",
@@ -217,9 +249,9 @@ def render_burndown_chart(df_week, title_suffix=""):
     st.plotly_chart(fig, use_container_width=True)
 
 # ============================================================
-# SECCIÓN 1: RESUMEN EJECUTIVO (parte principal)
+# SECTION 1: EXECUTIVE SUMMARY (main part)
 # ============================================================
-st.header("📌 Resumen Ejecutivo")
+st.header("📌 Executive Summary")
 
 sheet_names = get_sheet_names(file_bytes)
 summary = parse_dashboard_sheet(file_bytes, "Dashboard") if "Dashboard" in sheet_names else None
@@ -234,14 +266,14 @@ if summary is None:
 
 if summary:
     if fallback_used:
-        st.warning("No se encontró (o no se pudo interpretar) la pestaña **Dashboard**. "
-                    "Se calculó un resumen equivalente a partir de la pestaña **Data**. "
-                    "La gráfica de tendencia semanal no está disponible en este modo.")
+        st.warning("The **Dashboard** sheet could not be found (or interpreted). "
+                    "An equivalent summary was computed from the **Data** sheet instead. "
+                    "The weekly trend chart is not available in this mode.")
 
     c1, c2, c3 = st.columns(3)
-    with c1: kpi_card("OPEN DEFECTS", summary.get("open", "N/A"), "#e74c3c")
-    with c2: kpi_card("PENDING CONFIRMATION", summary.get("pending", "N/A"), "#f39c12")
-    with c3: kpi_card("CLOSED DEFECTS", summary.get("closed", "N/A"), "#2ecc71")
+    with c1: kpi_card("OPEN DEFECTS", summary.get("open", "N/A"), "#b03a2e")
+    with c2: kpi_card("PENDING CONFIRMATION", summary.get("pending", "N/A"), "#9a6a06")
+    with c3: kpi_card("CLOSED DEFECTS", summary.get("closed", "N/A"), "#1e7e45")
 
     st.markdown("####")
     left, right = st.columns([1, 1.3])
@@ -259,29 +291,29 @@ if summary:
         if summary.get("week_table") is not None:
             render_burndown_chart(summary["week_table"])
         else:
-            st.info("La gráfica de tendencia semanal (Burndown) requiere la pestaña **Dashboard** "
-                    "con la tabla de semanas (Week / Closed / Confirmation Pending / Open) en el Excel original.")
+            st.info("The weekly trend (Burndown) chart requires the **Dashboard** sheet "
+                    "with the weekly table (Week / Closed / Confirmation Pending / Open) from the original Excel file.")
 else:
-    st.error("No fue posible generar el resumen ejecutivo con este archivo. Verifica que contenga "
-              "la pestaña **Dashboard** o una pestaña **Data** con las columnas requeridas.")
+    st.error("Unable to generate the executive summary from this file. Please verify it contains "
+              "a **Dashboard** sheet or a **Data** sheet with the required columns.")
 
 st.markdown("---")
 
 # ============================================================
-# SECCIÓN 2: ANÁLISIS DETALLADO (pestaña Data)
+# SECTION 2: DETAILED ANALYSIS (Data sheet)
 # ============================================================
-st.header("🔍 Análisis Detallado")
+st.header("🔍 Detailed Analysis")
 
 default_sheet = "Data" if "Data" in sheet_names else sheet_names[0]
 sheet_selected = st.sidebar.selectbox(
-    "Hoja a analizar (Análisis Detallado)", sheet_names, index=sheet_names.index(default_sheet)
+    "Sheet to analyze (Detailed Analysis)", sheet_names, index=sheet_names.index(default_sheet)
 )
 df_raw = load_data(file_bytes, sheet_selected)
 
 required_cols = ["Conveyor", "Station", "Type", "Category", "Status", "Severity"]
 missing = [c for c in required_cols if c not in df_raw.columns]
 if missing:
-    st.error(f"Faltan columnas requeridas en la hoja seleccionada: {missing}")
+    st.error(f"The selected sheet is missing required columns: {missing}")
     st.stop()
 
 df = df_raw.copy()
@@ -289,8 +321,8 @@ for col in ["Status", "Severity", "Type", "Category", "Responsible"]:
     if col in df.columns:
         df[col] = df[col].astype(str).str.strip().replace({"nan": None, "None": None})
 
-# ---- Filtros ----
-st.sidebar.header("🔎 Filtros (Análisis Detallado)")
+# ---- Filters ----
+st.sidebar.header("🔎 Filters (Detailed Analysis)")
 
 def multiselect_filter(label, col):
     if col in df.columns:
@@ -298,10 +330,10 @@ def multiselect_filter(label, col):
         return st.sidebar.multiselect(label, options, default=options)
     return None
 
-type_sel = multiselect_filter("Tipo (Type)", "Type")
-status_sel = multiselect_filter("Estatus (Status)", "Status")
-severity_sel = multiselect_filter("Severidad (Severity)", "Severity")
-responsible_sel = multiselect_filter("Responsable", "Responsible")
+type_sel = multiselect_filter("Type", "Type")
+status_sel = multiselect_filter("Status", "Status")
+severity_sel = multiselect_filter("Severity", "Severity")
+responsible_sel = multiselect_filter("Responsible", "Responsible")
 
 mask = pd.Series(True, index=df.index)
 if type_sel is not None: mask &= df["Type"].isin(type_sel)
@@ -312,7 +344,7 @@ if responsible_sel is not None and "Responsible" in df.columns:
 
 if "Date Open" in df.columns and df["Date Open"].notna().any():
     min_date, max_date = df["Date Open"].min().date(), df["Date Open"].max().date()
-    date_range = st.sidebar.date_input("Rango de fecha de apertura", value=(min_date, max_date),
+    date_range = st.sidebar.date_input("Opening Date Range", value=(min_date, max_date),
                                         min_value=min_date, max_value=max_date)
     if isinstance(date_range, tuple) and len(date_range) == 2:
         start, end = date_range
@@ -320,14 +352,14 @@ if "Date Open" in df.columns and df["Date Open"].notna().any():
 
 df_f = df[mask].copy()
 st.sidebar.markdown("---")
-st.sidebar.write(f"**Registros mostrados:** {len(df_f)} / {len(df)}")
+st.sidebar.write(f"**Records displayed:** {len(df_f)} / {len(df)}")
 
-COLOR_STATUS = {"Open": "#e74c3c", "Closed": "#2ecc71", "Confirmation pending": "#f39c12"}
-COLOR_SEV = {"Minor": "#3498db", "Major": "#f39c12", "Critical": "#e74c3c"}
+COLOR_STATUS = {"Open": "#b03a2e", "Closed": "#1e7e45", "Confirmation pending": "#d9a406"}
+COLOR_SEV = {"Minor": "#3a7ab0", "Major": "#d9a406", "Critical": "#b03a2e"}
 
 c1, c2 = st.columns(2)
 with c1:
-    st.subheader("Distribución por Estatus")
+    st.subheader("Status Distribution")
     status_counts = df_f["Status"].value_counts().reset_index()
     status_counts.columns = ["Status", "Count"]
     fig = px.pie(status_counts, names="Status", values="Count", hole=0.45,
@@ -336,7 +368,7 @@ with c1:
     st.plotly_chart(fig, use_container_width=True)
 
 with c2:
-    st.subheader("Distribución por Severidad")
+    st.subheader("Severity Distribution")
     if "Severity" in df_f.columns:
         sev_counts = df_f["Severity"].value_counts().reset_index()
         sev_counts.columns = ["Severity", "Count"]
@@ -347,14 +379,14 @@ with c2:
 
 c3, c4 = st.columns(2)
 with c3:
-    st.subheader("Estatus por Tipo de Elemento")
+    st.subheader("Status by Element Type")
     type_status = df_f.groupby(["Type", "Status"]).size().reset_index(name="Count")
     fig3 = px.bar(type_status, x="Type", y="Count", color="Status", barmode="stack",
                   color_discrete_map=COLOR_STATUS)
     st.plotly_chart(fig3, use_container_width=True)
 
 with c4:
-    st.subheader("Top 15 Estaciones con más Defectos")
+    st.subheader("Top 15 Stations with Most Defects")
     if "Station" in df_f.columns:
         station_counts = df_f["Station"].value_counts().head(15).reset_index()
         station_counts.columns = ["Station", "Count"]
@@ -363,7 +395,7 @@ with c4:
         fig4.update_layout(yaxis={"categoryorder": "total ascending"}, coloraxis_showscale=False)
         st.plotly_chart(fig4, use_container_width=True)
 
-st.subheader("📈 Tendencia de Defectos por Semana (calculado desde Data)")
+st.subheader("📈 Weekly Defect Trend (calculated from Data)")
 if "Date Open" in df_f.columns and df_f["Date Open"].notna().any():
     df_trend = df_f.copy()
     df_trend["Week"] = df_trend["Date Open"].dt.to_period("W").astype(str)
@@ -371,17 +403,17 @@ if "Date Open" in df_f.columns and df_f["Date Open"].notna().any():
     fig5 = px.line(trend, x="Week", y="Count", color="Status", markers=True, color_discrete_map=COLOR_STATUS)
     st.plotly_chart(fig5, use_container_width=True)
 else:
-    st.info("No hay suficientes datos de fecha de apertura para mostrar la tendencia.")
+    st.info("There is not enough opening date data to display the trend.")
 
 if "Responsible" in df_f.columns and df_f["Responsible"].notna().any():
-    st.subheader("👷 Carga de Trabajo por Responsable")
+    st.subheader("👷 Workload by Responsible")
     resp = df_f.dropna(subset=["Responsible"]).groupby(["Responsible", "Status"]).size().reset_index(name="Count")
     fig6 = px.bar(resp, x="Responsible", y="Count", color="Status", barmode="stack", color_discrete_map=COLOR_STATUS)
     st.plotly_chart(fig6, use_container_width=True)
 
 st.markdown("---")
-st.subheader("📋 Detalle de Registros")
-search = st.text_input("Buscar en Conveyor / Estación / Comentarios")
+st.subheader("📋 Record Details")
+search = st.text_input("Search in Conveyor / Station / Comments")
 df_show = df_f.copy()
 if search:
     mask_search = pd.Series(False, index=df_show.index)
@@ -394,10 +426,10 @@ st.dataframe(df_show, use_container_width=True, height=400)
 col_dl1, col_dl2 = st.columns(2)
 with col_dl1:
     csv = df_show.to_csv(index=False).encode("utf-8-sig")
-    st.download_button("⬇️ Descargar CSV filtrado", data=csv, file_name="defectos_filtrados.csv", mime="text/csv")
+    st.download_button("⬇️ Download Filtered CSV", data=csv, file_name="filtered_defects.csv", mime="text/csv")
 with col_dl2:
     buffer = io.BytesIO()
     with pd.ExcelWriter(buffer, engine="xlsxwriter") as writer:
         df_show.to_excel(writer, index=False, sheet_name="Data")
-    st.download_button("⬇️ Descargar Excel filtrado", data=buffer.getvalue(), file_name="defectos_filtrados.xlsx",
+    st.download_button("⬇️ Download Filtered Excel", data=buffer.getvalue(), file_name="filtered_defects.xlsx",
                         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
