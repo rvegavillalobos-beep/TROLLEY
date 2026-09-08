@@ -1,234 +1,249 @@
-Sub GenerarDashboardYGraficoDefinitivo()
-    Dim wsData As Worksheet, wsDash As Worksheet
-    Dim lastRow As Long, i As Long, j As Long, k As Long
-    Dim dictFechas As Object
-    Dim cellVal As Variant
-    Dim dt As Date
-    Dim arrFechas() As Date
-    Dim temp As Date
-    
-    On Error Resume Next
-    Set wsData = ThisWorkbook.Sheets("Data")
-    On Error GoTo 0
-    
-    If wsData Is Nothing Then
-        MsgBox "No se encontró la hoja 'Data'. Revisa el nombre.", vbCritical
-        Exit Sub
-    End If
-    
-    ' Recrear hoja Dashboard
-    On Error Resume Next
-    Application.DisplayAlerts = False
-    ThisWorkbook.Sheets("Dashboard").Delete
-    Application.DisplayAlerts = True
-    On Error GoTo 0
-    
-    Set wsDash = ThisWorkbook.Sheets.Add(After:=ThisWorkbook.Sheets(ThisWorkbook.Sheets.Count))
-    wsDash.Name = "Dashboard"
-    
-    lastRow = wsData.Cells(wsData.Rows.Count, "C").End(xlUp).Row
-    
-    ' =========================================================
-    ' 1. TABLA 1: Status vs Severity
-    ' =========================================================
-    wsDash.Range("A2").Value = ""
-    wsDash.Range("B2").Value = "Minor"
-    wsDash.Range("C2").Value = "Major"
-    wsDash.Range("D2").Value = "Critical"
-    wsDash.Range("E2").Value = "Total"
-    
-    wsDash.Range("A3").Value = "Open"
-    wsDash.Range("A4").Value = "Confirmation Pending"
-    wsDash.Range("A5").Value = "Closed"
-    wsDash.Range("A6").Value = "Total"
-    
-    wsDash.Range("B3").Formula = "=COUNTIFS(Data!$E$2:$E$" & lastRow & ", ""Open"", Data!$F$2:$F$" & lastRow & ", ""Minor"")"
-    wsDash.Range("C3").Formula = "=COUNTIFS(Data!$E$2:$E$" & lastRow & ", ""Open"", Data!$F$2:$F$" & lastRow & ", ""Major"")"
-    wsDash.Range("D3").Formula = "=COUNTIFS(Data!$E$2:$E$" & lastRow & ", ""Open"", Data!$F$2:$F$" & lastRow & ", ""Critical"")"
-    wsDash.Range("E3").Formula = "=SUM(B3:D3)"
-    
-    wsDash.Range("B4").Formula = "=COUNTIFS(Data!$E$2:$E$" & lastRow & ", ""Confirmation pending"", Data!$F$2:$F$" & lastRow & ", ""Minor"")"
-    wsDash.Range("C4").Formula = "=COUNTIFS(Data!$E$2:$E$" & lastRow & ", ""Confirmation pending"", Data!$F$2:$F$" & lastRow & ", ""Major"")"
-    wsDash.Range("D4").Formula = "=COUNTIFS(Data!$E$2:$E$" & lastRow & ", ""Confirmation pending"", Data!$F$2:$F$" & lastRow & ", ""Critical"")"
-    wsDash.Range("E4").Formula = "=SUM(B4:D4)"
-    
-    wsDash.Range("B5").Formula = "=COUNTIFS(Data!$E$2:$E$" & lastRow & ", ""Closed"", Data!$F$2:$F$" & lastRow & ", ""Minor"")"
-    wsDash.Range("C5").Formula = "=COUNTIFS(Data!$E$2:$E$" & lastRow & ", ""Closed"", Data!$F$2:$F$" & lastRow & ", ""Major"")"
-    wsDash.Range("D5").Formula = "=COUNTIFS(Data!$E$2:$E$" & lastRow & ", ""Closed"", Data!$F$2:$F$" & lastRow & ", ""Critical"")"
-    wsDash.Range("E5").Formula = "=SUM(B5:D5)"
-    
-    wsDash.Range("B6").Formula = "=SUM(B3:B5)"
-    wsDash.Range("C6").Formula = "=SUM(C3:C5)"
-    wsDash.Range("D6").Formula = "=SUM(D3:D5)"
-    wsDash.Range("E6").Formula = "=SUM(E3:E5)"
-    
-    wsDash.Range("B2").Interior.Color = RGB(255, 255, 0)
-    wsDash.Range("C2").Interior.Color = RGB(255, 0, 0)
-    wsDash.Range("C2").Font.Color = RGB(255, 255, 255)
-    wsDash.Range("D2").Interior.Color = RGB(0, 0, 0)
-    wsDash.Range("D2").Font.Color = RGB(255, 255, 255)
-    
-    ' =========================================================
-    ' 2. TABLA 2: Element Type Breakdown
-    ' =========================================================
-    Dim tipos As Variant
-    tipos = Array("TR", "TL", "TU", "TQ", "TH", "TV", "FC", "Station")
-    Dim startRow As Integer: startRow = 9
-    
-    wsDash.Cells(startRow, 1).Value = "Element Type"
-    wsDash.Cells(startRow, 2).Value = "Open"
-    wsDash.Cells(startRow, 3).Value = "Closed"
-    wsDash.Cells(startRow, 4).Value = "Confirmation Pending"
-    wsDash.Cells(startRow, 5).Value = "Minor"
-    wsDash.Cells(startRow, 6).Value = "Major"
-    wsDash.Cells(startRow, 7).Value = "Critical"
-    
-    wsDash.Cells(startRow, 2).Interior.Color = RGB(146, 208, 80)
-    wsDash.Cells(startRow, 3).Interior.Color = RGB(255, 0, 0)
-    wsDash.Cells(startRow, 3).Font.Color = RGB(255, 255, 255)
-    wsDash.Cells(startRow, 4).Interior.Color = RGB(255, 192, 0)
-    wsDash.Cells(startRow, 5).Interior.Color = RGB(255, 255, 0)
-    wsDash.Cells(startRow, 6).Interior.Color = RGB(255, 0, 0)
-    wsDash.Cells(startRow, 6).Font.Color = RGB(255, 255, 255)
-    wsDash.Cells(startRow, 7).Interior.Color = RGB(0, 0, 0)
-    wsDash.Cells(startRow, 7).Font.Color = RGB(255, 255, 255)
-    
-    For i = 0 To UBound(tipos)
-        Dim r As Integer: r = startRow + 1 + i
-        wsDash.Cells(r, 1).Value = tipos(i)
-        wsDash.Cells(r, 2).Formula = "=COUNTIFS(Data!$C$2:$C$" & lastRow & ", " & """" & tipos(i) & """" & ", Data!$E$2:$E$" & lastRow & ", ""Open"")"
-        wsDash.Cells(r, 3).Formula = "=COUNTIFS(Data!$C$2:$C$" & lastRow & ", " & """" & tipos(i) & """" & ", Data!$E$2:$E$" & lastRow & ", ""Closed"")"
-        wsDash.Cells(r, 4).Formula = "=COUNTIFS(Data!$C$2:$C$" & lastRow & ", " & """" & tipos(i) & """" & ", Data!$E$2:$E$" & lastRow & ", ""Confirmation pending"")"
-        wsDash.Cells(r, 5).Formula = "=COUNTIFS(Data!$C$2:$C$" & lastRow & ", " & """" & tipos(i) & """" & ", Data!$F$2:$F$" & lastRow & ", ""Minor"")"
-        wsDash.Cells(r, 6).Formula = "=COUNTIFS(Data!$C$2:$C$" & lastRow & ", " & """" & tipos(i) & """" & ", Data!$F$2:$F$" & lastRow & ", ""Major"")"
-        wsDash.Cells(r, 7).Formula = "=COUNTIFS(Data!$C$2:$C$" & lastRow & ", " & """" & tipos(i) & """" & ", Data!$F$2:$F$" & lastRow & ", ""Critical"")"
-    Next i
-    
-    Dim totalRowIdx As Integer: totalRowIdx = startRow + 1 + UBound(tipos) + 1
-    wsDash.Cells(totalRowIdx, 1).Value = "TOTAL"
-    Dim colLetter As String
-    For j = 2 To 7
-        colLetter = Split(wsDash.Cells(1, j).Address, "$")(1)
-        wsDash.Cells(totalRowIdx, j).Formula = "=SUM(" & colLetter & "10:" & colLetter & (totalRowIdx - 1) & ")"
-    Next j
-    
-    wsDash.Range("A2:E6").Borders.LineStyle = xlContinuous
-    wsDash.Range("A9:G" & totalRowIdx).Borders.LineStyle = xlContinuous
+import streamlit as st
+import pandas as pd
+import plotly.express as px
+import io
 
-    ' =========================================================
-    ' 3. EXTRACCIÓN Y PARSEO ROBUSTO DE FECHAS (COLUMNAS G Y H)
-    ' =========================================================
-    Set dictFechas = CreateObject("Scripting.Dictionary")
-    
-    ' Leer Date Open (G) y Date Closed (H) e interpretar formato "d-mmm-yy"
-    For i = 2 To lastRow
-        ' Date Open
-        cellVal = wsData.Cells(i, 7).Value
-        If IsDate(cellVal) Then
-            dt = CDate(cellVal)
-            If Not dictFechas.exists(dt) Then dictFechas.Add dt, dt
-        End If
-        ' Date Closed
-        cellVal = wsData.Cells(i, 8).Value
-        If IsDate(cellVal) Then
-            dt = CDate(cellVal)
-            If Not dictFechas.exists(dt) Then dictFechas.Add dt, dt
-        End If
-    Next i
+# ============================================================
+# CONFIGURACIÓN DE PÁGINA
+# ============================================================
+st.set_page_config(
+    page_title="Dashboard de Defectos - Transportadores",
+    layout="wide",
+    page_icon="📊"
+)
 
-    If dictFechas.Count = 0 Then
-        MsgBox "No se encontraron fechas válidas en las columnas G o H de 'Data'.", vbExclamation
-        Exit Sub
-    End If
+st.markdown("""
+<style>
+    .stMetric {
+        background-color: #f8f9fa;
+        border-radius: 10px;
+        padding: 10px;
+        border: 1px solid #e0e0e0;
+    }
+    h1, h2, h3 { color: #1f2c4c; }
+</style>
+""", unsafe_allow_html=True)
 
-    ' Pasar fechas a arreglo y ordenar de menor a mayor
-    ReDim arrFechas(1 To dictFechas.Count)
-    i = 1
-    For Each cellVal In dictFechas.Keys
-        arrFechas(i) = CDate(cellVal)
-        i = i + 1
-    Next cellVal
-    
-    For i = 1 To UBound(arrFechas) - 1
-        For j = i + 1 To UBound(arrFechas)
-            If arrFechas(i) > arrFechas(j) Then
-                temp = arrFechas(i)
-                arrFechas(i) = arrFechas(j)
-                arrFechas(j) = temp
-            End If
-        Next j
-    Next i
+st.title("📊 Dashboard de Gestión de Defectos - Transportadores")
+st.caption("Carga tu archivo Excel para visualizar el estado de los defectos en tiempo real.")
 
-    ' Escribir la tabla del gráfico en J2:M...
-    wsDash.Range("J2").Value = "Date"
-    wsDash.Range("K2").Value = "Open"
-    wsDash.Range("L2").Value = "Confirmation Pending"
-    wsDash.Range("M2").Value = "Closed"
-    
-    ' Cargar fechas procesadas directamente a la hoja y calcular series acumuladas en VBA
-    Dim countOpen As Long, countConf As Long, countClosed As Long
-    Dim dtOpen As Variant, dtClosed As Variant, st As String
-    
-    For k = 1 To UBound(arrFechas)
-        dt = arrFechas(k)
-        wsDash.Cells(k + 2, 10).Value = dt
-        wsDash.Cells(k + 2, 10).NumberFormat = "dd-mmm-yy"
-        
-        countOpen = 0
-        countConf = 0
-        countClosed = 0
-        
-        ' Recorrer filas para conteo acumulado exacto hasta la fecha dt
-        For i = 2 To lastRow
-            st = Trim(LCase(wsData.Cells(i, 5).Value)) ' Status
-            dtOpen = wsData.Cells(i, 7).Value
-            dtClosed = wsData.Cells(i, 8).Value
-            
-            ' Validar Open
-            If st = "open" And IsDate(dtOpen) Then
-                If CDate(dtOpen) <= dt Then countOpen = countOpen + 1
-            End If
-            
-            ' Validar Confirmation Pending
-            If st = "confirmation pending" And IsDate(dtOpen) Then
-                If CDate(dtOpen) <= dt Then countConf = countConf + 1
-            End If
-            
-            ' Validar Closed
-            If st = "closed" And IsDate(dtClosed) Then
-                If CDate(dtClosed) <= dt Then countClosed = countClosed + 1
-            End If
-        Next i
-        
-        wsDash.Cells(k + 2, 11).Value = countOpen
-        wsDash.Cells(k + 2, 12).Value = countConf
-        wsDash.Cells(k + 2, 13).Value = countClosed
-    Next k
+# ============================================================
+# CARGA DE ARCHIVO
+# ============================================================
+st.sidebar.header("📁 Cargar archivo")
+uploaded_file = st.sidebar.file_uploader("Selecciona el archivo Excel (.xlsx)", type=["xlsx", "xls"])
 
-    ' =========================================================
-    ' 4. DIBUJAR GRÁFICO
-    ' =========================================================
-    Dim chtObj As ChartObject
-    Dim lastDateRow As Long: lastDateRow = UBound(arrFechas) + 2
-    
-    Set chtObj = wsDash.ChartObjects.Add(Left:=520, Top:=20, Width:=620, Height:=360)
-    
-    With chtObj.Chart
-        .ChartType = xlAreaStacked
-        .SetSourceData Source:=wsDash.Range("J2:M" & lastDateRow)
-        .HasTitle = True
-        .ChartTitle.Text = "Status Trend Over Time"
-        .HasLegend = True
-        .Legend.Position = xlLegendPositionBottom
-        
-        ' Asignar colores exactos a tus 3 estados
-        On Error Resume Next
-        .SeriesCollection(1).Format.Fill.ForeColor.RGB = RGB(146, 208, 80) ' Open (Verde)
-        .SeriesCollection(2).Format.Fill.ForeColor.RGB = RGB(255, 192, 0)  ' Confirmation Pending (Amarillo)
-        .SeriesCollection(3).Format.Fill.ForeColor.RGB = RGB(255, 0, 0)    ' Closed (Rojo)
-        On Error GoTo 0
-    End With
+@st.cache_data
+def get_sheet_names(file):
+    return pd.ExcelFile(file).sheet_names
 
-    wsDash.Columns.AutoFit
-    MsgBox "¡Dashboard generado correctamente! Las fechas fueron procesadas sin importar su formato de texto.", vbInformation
-End Sub
+@st.cache_data
+def load_data(file, sheet_name):
+    df = pd.read_excel(file, sheet_name=sheet_name)
+    df.columns = [str(c).strip() for c in df.columns]
+    for col in ["Date Open", "Date Closed"]:
+        if col in df.columns:
+            df[col] = pd.to_datetime(df[col], errors="coerce")
+    return df
+
+if uploaded_file is None:
+    st.info("👆 Carga un archivo Excel desde la barra lateral para comenzar.")
+    st.stop()
+
+sheet_names = get_sheet_names(uploaded_file)
+default_sheet = "Data" if "Data" in sheet_names else sheet_names[0]
+sheet_selected = st.sidebar.selectbox(
+    "Hoja a analizar", sheet_names, index=sheet_names.index(default_sheet)
+)
+
+df_raw = load_data(uploaded_file, sheet_selected)
+
+required_cols = ["Conveyor", "Station", "Type", "Category", "Status", "Severity"]
+missing = [c for c in required_cols if c not in df_raw.columns]
+if missing:
+    st.error(f"Faltan columnas requeridas en la hoja seleccionada: {missing}")
+    st.stop()
+
+df = df_raw.copy()
+for col in ["Status", "Severity", "Type", "Category", "Responsible"]:
+    if col in df.columns:
+        df[col] = df[col].astype(str).str.strip().replace({"nan": None, "None": None})
+
+# ============================================================
+# FILTROS
+# ============================================================
+st.sidebar.header("🔎 Filtros")
+
+def multiselect_filter(label, col):
+    if col in df.columns:
+        options = sorted([o for o in df[col].dropna().unique().tolist()])
+        return st.sidebar.multiselect(label, options, default=options)
+    return None
+
+type_sel = multiselect_filter("Tipo (Type)", "Type")
+status_sel = multiselect_filter("Estatus (Status)", "Status")
+severity_sel = multiselect_filter("Severidad (Severity)", "Severity")
+responsible_sel = multiselect_filter("Responsable", "Responsible")
+
+mask = pd.Series(True, index=df.index)
+if type_sel is not None:
+    mask &= df["Type"].isin(type_sel)
+if status_sel is not None:
+    mask &= df["Status"].isin(status_sel)
+if severity_sel is not None:
+    mask &= df["Severity"].isin(severity_sel)
+if responsible_sel is not None and "Responsible" in df.columns:
+    mask &= df["Responsible"].isin(responsible_sel) | df["Responsible"].isna()
+
+if "Date Open" in df.columns and df["Date Open"].notna().any():
+    min_date = df["Date Open"].min().date()
+    max_date = df["Date Open"].max().date()
+    date_range = st.sidebar.date_input(
+        "Rango de fecha de apertura",
+        value=(min_date, max_date),
+        min_value=min_date,
+        max_value=max_date
+    )
+    if isinstance(date_range, tuple) and len(date_range) == 2:
+        start, end = date_range
+        mask &= (df["Date Open"].dt.date >= start) & (df["Date Open"].dt.date <= end)
+
+df_f = df[mask].copy()
+st.sidebar.markdown("---")
+st.sidebar.write(f"**Registros mostrados:** {len(df_f)} / {len(df)}")
+
+# ============================================================
+# KPIs
+# ============================================================
+total = len(df_f)
+status_lower = df_f["Status"].str.lower().fillna("")
+severity_lower = df_f["Severity"].str.lower().fillna("") if "Severity" in df_f.columns else pd.Series("", index=df_f.index)
+
+open_count = (status_lower == "open").sum()
+pending_count = status_lower.str.contains("pending", na=False).sum()
+closed_count = (status_lower == "closed").sum()
+critical_open = ((status_lower != "closed") & (severity_lower == "critical")).sum()
+
+avg_days = None
+if "Date Open" in df_f.columns and "Date Closed" in df_f.columns:
+    closed_mask = df_f["Date Closed"].notna() & df_f["Date Open"].notna()
+    if closed_mask.any():
+        avg_days = (df_f.loc[closed_mask, "Date Closed"] - df_f.loc[closed_mask, "Date Open"]).dt.days.mean()
+
+col1, col2, col3, col4, col5, col6 = st.columns(6)
+col1.metric("Total defectos", total)
+col2.metric("Abiertos", open_count)
+col3.metric("Pend. Confirmación", pending_count)
+col4.metric("Cerrados", closed_count)
+col5.metric("Críticos activos", critical_open)
+col6.metric("Días prom. resolución", f"{avg_days:.1f}" if avg_days is not None else "N/A")
+
+st.markdown("---")
+
+COLOR_STATUS = {"Open": "#e74c3c", "Closed": "#2ecc71", "Confirmation pending": "#f39c12"}
+COLOR_SEV = {"Minor": "#3498db", "Major": "#f39c12", "Critical": "#e74c3c"}
+
+# ============================================================
+# GRÁFICOS - FILA 1
+# ============================================================
+c1, c2 = st.columns(2)
+
+with c1:
+    st.subheader("Distribución por Estatus")
+    status_counts = df_f["Status"].value_counts().reset_index()
+    status_counts.columns = ["Status", "Count"]
+    fig = px.pie(status_counts, names="Status", values="Count", hole=0.45,
+                 color="Status", color_discrete_map=COLOR_STATUS)
+    fig.update_traces(textinfo="percent+value")
+    st.plotly_chart(fig, use_container_width=True)
+
+with c2:
+    st.subheader("Distribución por Severidad")
+    if "Severity" in df_f.columns:
+        sev_counts = df_f["Severity"].value_counts().reset_index()
+        sev_counts.columns = ["Severity", "Count"]
+        fig2 = px.bar(sev_counts, x="Severity", y="Count", color="Severity",
+                      text="Count", color_discrete_map=COLOR_SEV)
+        fig2.update_layout(showlegend=False)
+        st.plotly_chart(fig2, use_container_width=True)
+
+# ============================================================
+# GRÁFICOS - FILA 2
+# ============================================================
+c3, c4 = st.columns(2)
+
+with c3:
+    st.subheader("Estatus por Tipo de Elemento")
+    if "Type" in df_f.columns:
+        type_status = df_f.groupby(["Type", "Status"]).size().reset_index(name="Count")
+        fig3 = px.bar(type_status, x="Type", y="Count", color="Status", barmode="stack",
+                      color_discrete_map=COLOR_STATUS)
+        st.plotly_chart(fig3, use_container_width=True)
+
+with c4:
+    st.subheader("Top 15 Estaciones con más Defectos")
+    if "Station" in df_f.columns:
+        station_counts = df_f["Station"].value_counts().head(15).reset_index()
+        station_counts.columns = ["Station", "Count"]
+        fig4 = px.bar(station_counts, x="Count", y="Station", orientation="h",
+                      text="Count", color="Count", color_continuous_scale="Reds")
+        fig4.update_layout(yaxis={"categoryorder": "total ascending"}, coloraxis_showscale=False)
+        st.plotly_chart(fig4, use_container_width=True)
+
+# ============================================================
+# TENDENCIA SEMANAL
+# ============================================================
+st.subheader("📈 Tendencia de Defectos por Semana")
+if "Date Open" in df_f.columns and df_f["Date Open"].notna().any():
+    df_trend = df_f.copy()
+    df_trend["Week"] = df_trend["Date Open"].dt.to_period("W").astype(str)
+    trend = df_trend.groupby(["Week", "Status"]).size().reset_index(name="Count")
+    fig5 = px.line(trend, x="Week", y="Count", color="Status", markers=True,
+                   color_discrete_map=COLOR_STATUS)
+    st.plotly_chart(fig5, use_container_width=True)
+else:
+    st.info("No hay suficientes datos de fecha de apertura para mostrar la tendencia.")
+
+# ============================================================
+# CARGA DE TRABAJO POR RESPONSABLE
+# ============================================================
+if "Responsible" in df_f.columns and df_f["Responsible"].notna().any():
+    st.subheader("👷 Carga de Trabajo por Responsable")
+    resp = df_f.dropna(subset=["Responsible"]).groupby(["Responsible", "Status"]).size().reset_index(name="Count")
+    fig6 = px.bar(resp, x="Responsible", y="Count", color="Status", barmode="stack",
+                  color_discrete_map=COLOR_STATUS)
+    st.plotly_chart(fig6, use_container_width=True)
+
+st.markdown("---")
+
+# ============================================================
+# TABLA DE DETALLE
+# ============================================================
+st.subheader("📋 Detalle de Registros")
+search = st.text_input("Buscar en Conveyor / Estación / Comentarios")
+df_show = df_f.copy()
+if search:
+    mask_search = pd.Series(False, index=df_show.index)
+    for col in ["Conveyor", "Station", "Comments"]:
+        if col in df_show.columns:
+            mask_search |= df_show[col].astype(str).str.contains(search, case=False, na=False)
+    df_show = df_show[mask_search]
+
+st.dataframe(df_show, use_container_width=True, height=400)
+
+# ============================================================
+# DESCARGA DE DATOS FILTRADOS
+# ============================================================
+col_dl1, col_dl2 = st.columns(2)
+with col_dl1:
+    csv = df_show.to_csv(index=False).encode("utf-8-sig")
+    st.download_button("⬇️ Descargar CSV filtrado", data=csv,
+                        file_name="defectos_filtrados.csv", mime="text/csv")
+
+with col_dl2:
+    buffer = io.BytesIO()
+    with pd.ExcelWriter(buffer, engine="xlsxwriter") as writer:
+        df_show.to_excel(writer, index=False, sheet_name="Data")
+    st.download_button("⬇️ Descargar Excel filtrado", data=buffer.getvalue(),
+                        file_name="defectos_filtrados.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
