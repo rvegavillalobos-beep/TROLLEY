@@ -170,7 +170,7 @@ def fmt_num(v):
     return str(v)
 
 # ============================================================
-# EXECUTIVE SUMMARY VISUAL COMPONENTS (revised color scheme for contrast)
+# EXECUTIVE SUMMARY VISUAL COMPONENTS
 # ============================================================
 def kpi_card(title, value, color):
     st.markdown(f"""
@@ -180,7 +180,6 @@ def kpi_card(title, value, color):
     </div>
     """, unsafe_allow_html=True)
 
-# Softer, darker status colors for good contrast on light cell backgrounds
 STATUS_TEXT_COLOR = {
     "Open": "#b03a2e",
     "Confirmation Pending": "#9a6a06",
@@ -190,7 +189,6 @@ STATUS_TEXT_COLOR = {
 
 def render_severity_table(df_sev):
     html = "<table style='width:100%; border-collapse:collapse; text-align:center; border:1px solid #c9ced6;'>"
-    # Header row
     html += "<tr>" + "".join(
         f"<th style='background-color:#1f2c4c;color:#ffffff;padding:8px;border:1px solid #c9ced6;font-weight:600;'>{c}</th>"
         for c in df_sev.columns) + "</tr>"
@@ -247,6 +245,27 @@ def render_burndown_chart(df_week, title_suffix=""):
         legend=dict(orientation="h", y=-0.2), height=430
     )
     st.plotly_chart(fig, use_container_width=True)
+
+def render_category_table(df_cat):
+    """Renders the Category summary table with the same contrast-friendly style."""
+    html = "<table style='width:100%; border-collapse:collapse; text-align:center; border:1px solid #c9ced6;'>"
+    html += "<tr>" + "".join(
+        f"<th style='background-color:#1f2c4c;color:#ffffff;padding:8px;border:1px solid #c9ced6;font-weight:600;'>{c}</th>"
+        for c in df_cat.columns) + "</tr>"
+    for idx, row in df_cat.iterrows():
+        is_total = str(row["Category"]).strip().upper() == "TOTAL"
+        bg = "#eef1f6" if is_total else ("#f4f6f9" if idx % 2 == 0 else "#ffffff")
+        w = "700" if is_total else "500"
+        html += f"<tr style='background-color:{bg};'>"
+        html += f"<td style='padding:8px;border:1px solid #c9ced6;font-weight:{w};color:#1f2c4c;text-align:left;padding-left:12px;'>{row['Category']}</td>"
+        for c in df_cat.columns[1:]:
+            val = row[c]
+            display_val = f"{val:.1f}%" if c == "% of Total" else fmt_num(val)
+            color = "#b03a2e" if c == "Critical" and isinstance(val, (int, float)) and val > 0 else "#2c3e50"
+            html += f"<td style='padding:8px;border:1px solid #c9ced6;font-weight:{w};color:{color};'>{display_val}</td>"
+        html += "</tr>"
+    html += "</table>"
+    st.markdown(html, unsafe_allow_html=True)
 
 # ============================================================
 # SECTION 1: EXECUTIVE SUMMARY (main part)
@@ -331,12 +350,14 @@ def multiselect_filter(label, col):
     return None
 
 type_sel = multiselect_filter("Type", "Type")
+category_sel = multiselect_filter("Category", "Category")
 status_sel = multiselect_filter("Status", "Status")
 severity_sel = multiselect_filter("Severity", "Severity")
 responsible_sel = multiselect_filter("Responsible", "Responsible")
 
 mask = pd.Series(True, index=df.index)
 if type_sel is not None: mask &= df["Type"].isin(type_sel)
+if category_sel is not None: mask &= df["Category"].isin(category_sel)
 if status_sel is not None: mask &= df["Status"].isin(status_sel)
 if severity_sel is not None: mask &= df["Severity"].isin(severity_sel)
 if responsible_sel is not None and "Responsible" in df.columns:
@@ -395,17 +416,77 @@ with c4:
         fig4.update_layout(yaxis={"categoryorder": "total ascending"}, coloraxis_showscale=False)
         st.plotly_chart(fig4, use_container_width=True)
 
-st.subheader("📈 Weekly Defect Trend (calculated from Data)")
-if "Date Open" in df_f.columns and df_f["Date Open"].notna().any():
-    df_trend = df_f.copy()
-    df_trend["Week"] = df_trend["Date Open"].dt.to_period("W").astype(str)
-    trend = df_trend.groupby(["Week", "Status"]).size().reset_index(name="Count")
-    fig5 = px.line(trend, x="Week", y="Count", color="Status", markers=True, color_discrete_map=COLOR_STATUS)
-    st.plotly_chart(fig5, use_container_width=True)
-else:
-    st.info("There is not enough opening date data to display the trend.")
+# ============================================================
+# CATEGORY ANALYSIS (new section)
+# ============================================================
+st.markdown("---")
+st.subheader("📂 Category Analysis")
+st.caption("Breakdown of defects by root-cause category (e.g. Acceleration / Mechanical, Sensors, Parametrization).")
 
+if "Category" in df_f.columns and df_f["Category"].notna().any():
+    cat_base = df_f.dropna(subset=["Category"]).copy()
+    cat_base["StatusNorm"] = cat_base["Status"].apply(
+        lambda x: "Open" if str(x).strip().lower() == "open"
+        else ("Closed" if str(x).strip().lower() == "closed" else "Confirmation Pending")
+    )
+
+    cat_summary = cat_base.groupby("Category").agg(
+        Total=("Category", "size"),
+        Open=("StatusNorm", lambda s: (s == "Open").sum()),
+        Confirmation_Pending=("StatusNorm", lambda s: (s == "Confirmation Pending").sum()),
+        Closed=("StatusNorm", lambda s: (s == "Closed").sum()),
+        Critical=("Severity", lambda s: (s == "Critical").sum())
+    ).reset_index().rename(columns={"Confirmation_Pending": "Confirmation Pending"})
+
+    cat_summary["% of Total"] = (cat_summary["Total"] / cat_summary["Total"].sum() * 100).round(1)
+    cat_summary = cat_summary.sort_values("Total", ascending=False).reset_index(drop=True)
+
+    total_row = {
+        "Category": "TOTAL",
+        "Total": cat_summary["Total"].sum(),
+        "Open": cat_summary["Open"].sum(),
+        "Confirmation Pending": cat_summary["Confirmation Pending"].sum(),
+        "Closed": cat_summary["Closed"].sum(),
+        "Critical": cat_summary["Critical"].sum(),
+        "% of Total": 100.0
+    }
+    cat_summary_display = pd.concat([cat_summary, pd.DataFrame([total_row])], ignore_index=True)
+    cat_summary_display = cat_summary_display[
+        ["Category", "Total", "% of Total", "Open", "Confirmation Pending", "Closed", "Critical"]
+    ]
+
+    col_tbl, col_charts = st.columns([1, 1.3])
+
+    with col_tbl:
+        render_category_table(cat_summary_display)
+
+    with col_charts:
+        fig_donut = px.pie(
+            cat_summary, names="Category", values="Total", hole=0.45,
+            title="Defect Volume Share by Category",
+            color_discrete_sequence=["#2f3f5c", "#3a7ab0", "#8fa8c4", "#c9ced6"]
+        )
+        fig_donut.update_traces(textinfo="percent+value")
+        st.plotly_chart(fig_donut, use_container_width=True)
+
+        cat_status_melt = cat_summary.melt(
+            id_vars="Category", value_vars=["Open", "Confirmation Pending", "Closed"],
+            var_name="Status", value_name="Count"
+        )
+        fig_cat_status = px.bar(
+            cat_status_melt, x="Category", y="Count", color="Status", barmode="stack",
+            title="Resolution Status by Category",
+            color_discrete_map={"Open": "#b03a2e", "Confirmation Pending": "#d9a406", "Closed": "#1e7e45"}
+        )
+        st.plotly_chart(fig_cat_status, use_container_width=True)
+else:
+    st.info("The Category column is not available or has no data in the current filtered selection.")
+
+# ============================================================
+# WORKLOAD BY RESPONSIBLE
+# ============================================================
 if "Responsible" in df_f.columns and df_f["Responsible"].notna().any():
+    st.markdown("---")
     st.subheader("👷 Workload by Responsible")
     resp = df_f.dropna(subset=["Responsible"]).groupby(["Responsible", "Status"]).size().reset_index(name="Count")
     fig6 = px.bar(resp, x="Responsible", y="Count", color="Status", barmode="stack", color_discrete_map=COLOR_STATUS)
