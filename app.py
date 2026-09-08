@@ -3,7 +3,6 @@ import pandas as pd
 import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
-from openpyxl import load_workbook
 import io
 
 # ============================================================
@@ -24,7 +23,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.title("📊 Defect Management Dashboard - Conveyors")
-st.caption("Upload your Excel file to view the executive summary and the detailed analysis.")
+st.caption("Upload your Excel file. All KPIs, tables and charts are calculated live from the **Data** sheet only.")
 
 # ============================================================
 # FILE UPLOAD
@@ -56,101 +55,22 @@ def load_data(_bytes, sheet_name):
 sheet_names = get_sheet_names(file_bytes)
 default_data_sheet = "Data" if "Data" in sheet_names else sheet_names[0]
 
-# Full, unfiltered Data sheet - used for the live burndown chart & as fallback for the summary
-df_data_full = load_data(file_bytes, default_data_sheet)
+sheet_selected = st.sidebar.selectbox(
+    "Sheet to analyze", sheet_names, index=sheet_names.index(default_data_sheet)
+)
+df_raw = load_data(file_bytes, sheet_selected)
 
-# ============================================================
-# READ EXECUTIVE SUMMARY TABLES ("Dashboard" sheet) - KPI cards & breakdown tables only
-# (The trend/burndown chart NO LONGER uses this sheet - see dynamic section below)
-# ============================================================
-def find_cell(ws, target):
-    target = str(target).strip().lower()
-    for row in ws.iter_rows():
-        for cell in row:
-            if isinstance(cell.value, str) and cell.value.strip().lower() == target:
-                return cell.row, cell.column
-    return None
+required_cols = ["Conveyor", "Station", "Type", "Category", "Status", "Severity"]
+missing = [c for c in required_cols if c not in df_raw.columns]
+if missing:
+    st.error(f"The selected sheet is missing required columns: {missing}. "
+             f"Please make sure you selected the **Data** sheet.")
+    st.stop()
 
-def get_value(ws, r, c):
-    return ws.cell(row=r, column=c).value
-
-@st.cache_data
-def parse_dashboard_sheet(_bytes, sheet_name="Dashboard"):
-    try:
-        wb = load_workbook(io.BytesIO(_bytes), data_only=True)
-    except Exception:
-        return None
-    if sheet_name not in wb.sheetnames:
-        return None
-    ws = wb[sheet_name]
-    result = {}
-
-    for label, key in [("OPEN DEFECTS", "open"), ("PENDING CONFIRMATION", "pending"), ("CLOSED DEFECTS", "closed")]:
-        pos = find_cell(ws, label)
-        if pos:
-            r, c = pos
-            result[key] = get_value(ws, r + 1, c)
-
-    pos = find_cell(ws, "Status / Severity")
-    if pos:
-        r, c = pos
-        rows = ["Open", "Confirmation Pending", "Closed", "Total"]
-        data = []
-        for i, row_label in enumerate(rows, start=1):
-            vals = [get_value(ws, r + i, c + j) for j in range(1, 5)]
-            data.append([row_label] + vals)
-        result["severity_table"] = pd.DataFrame(data, columns=["Status/Severity", "Minor", "Major", "Critical", "Total"])
-
-    pos = find_cell(ws, "Element Type")
-    if pos:
-        r, c = pos
-        rows_data, i = [], 2
-        while True:
-            label = get_value(ws, r + i, c)
-            if label is None or str(label).strip() == "":
-                break
-            vals = [get_value(ws, r + i, c + j) for j in range(1, 7)]
-            rows_data.append([label] + vals)
-            i += 1
-        result["element_table"] = pd.DataFrame(
-            rows_data, columns=["Element Type", "Open", "Closed", "Pending", "Minor", "Major", "Critical"]
-        )
-
-    return result if result else None
-
-def compute_fallback_summary(df):
-    df_tmp = df.copy()
-    df_tmp["StatusNorm"] = df_tmp["Status"].astype(str).apply(
-        lambda x: "Open" if x.strip().lower() == "open"
-        else ("Closed" if x.strip().lower() == "closed" else "Confirmation Pending")
-    )
-    open_v = (df_tmp["StatusNorm"] == "Open").sum()
-    pending_v = (df_tmp["StatusNorm"] == "Confirmation Pending").sum()
-    closed_v = (df_tmp["StatusNorm"] == "Closed").sum()
-
-    sev_order, status_order = ["Minor", "Major", "Critical"], ["Open", "Confirmation Pending", "Closed"]
-    pivot = pd.crosstab(df_tmp["StatusNorm"], df_tmp["Severity"]).reindex(
-        index=status_order, columns=sev_order, fill_value=0
-    )
-    pivot["Total"] = pivot.sum(axis=1)
-    total_row = pivot.sum(axis=0)
-    total_row.name = "Total"
-    pivot = pd.concat([pivot, pd.DataFrame([total_row])])
-    df_sev = pivot.reset_index().rename(columns={"index": "Status/Severity"})
-
-    elem_rows = []
-    for etype, g in df_tmp.groupby("Type"):
-        elem_rows.append([
-            etype, (g["StatusNorm"] == "Open").sum(), (g["StatusNorm"] == "Closed").sum(),
-            (g["StatusNorm"] == "Confirmation Pending").sum(),
-            (g["Severity"] == "Minor").sum(), (g["Severity"] == "Major").sum(), (g["Severity"] == "Critical").sum()
-        ])
-    df_elem = pd.DataFrame(elem_rows, columns=["Element Type", "Open", "Closed", "Pending", "Minor", "Major", "Critical"])
-    total = ["TOTAL"] + [df_elem[c].sum() for c in ["Open", "Closed", "Pending", "Minor", "Major", "Critical"]]
-    df_elem = pd.concat([df_elem, pd.DataFrame([total], columns=df_elem.columns)], ignore_index=True)
-
-    return {"open": open_v, "pending": pending_v, "closed": closed_v,
-            "severity_table": df_sev, "element_table": df_elem}
+df_data_full = df_raw.copy()
+for col in ["Status", "Severity", "Type", "Category", "Responsible"]:
+    if col in df_data_full.columns:
+        df_data_full[col] = df_data_full[col].astype(str).str.strip().replace({"nan": None, "None": None})
 
 # ============================================================
 # HELPERS
@@ -170,6 +90,50 @@ def normalize_status_series(s):
     return s.astype(str).str.strip().str.lower().map(
         lambda v: "Open" if v == "open" else ("Closed" if v == "closed" else "Confirmation Pending")
     )
+
+# ============================================================
+# LIVE SUMMARY: KPIs + Status/Severity table + Element Type table
+# 100% computed from the Data sheet - the Dashboard sheet is never read.
+# ============================================================
+def compute_live_summary(df):
+    d = df.copy()
+    d["StatusNorm"] = normalize_status_series(d["Status"])
+
+    open_v = (d["StatusNorm"] == "Open").sum()
+    pending_v = (d["StatusNorm"] == "Confirmation Pending").sum()
+    closed_v = (d["StatusNorm"] == "Closed").sum()
+
+    sev_order = ["Minor", "Major", "Critical"]
+    status_order = ["Open", "Confirmation Pending", "Closed"]
+    d["SeverityClean"] = d["Severity"].where(d["Severity"].isin(sev_order))
+
+    pivot = pd.crosstab(d["StatusNorm"], d["SeverityClean"]).reindex(
+        index=status_order, columns=sev_order, fill_value=0
+    )
+    pivot["Total"] = pivot.sum(axis=1)
+    total_row = pivot.sum(axis=0)
+    total_row.name = "Total"
+    pivot = pd.concat([pivot, pd.DataFrame([total_row])])
+    df_sev = pivot.reset_index().rename(columns={"index": "Status/Severity"})
+
+    elem_rows = []
+    for etype, g in d.groupby("Type"):
+        elem_rows.append([
+            etype,
+            (g["StatusNorm"] == "Open").sum(),
+            (g["StatusNorm"] == "Closed").sum(),
+            (g["StatusNorm"] == "Confirmation Pending").sum(),
+            (g["SeverityClean"] == "Minor").sum(),
+            (g["SeverityClean"] == "Major").sum(),
+            (g["SeverityClean"] == "Critical").sum(),
+        ])
+    df_elem = pd.DataFrame(elem_rows, columns=["Element Type", "Open", "Closed", "Pending", "Minor", "Major", "Critical"])
+    df_elem = df_elem.sort_values("Open", ascending=False).reset_index(drop=True) if not df_elem.empty else df_elem
+    total = ["TOTAL"] + [df_elem[c].sum() for c in ["Open", "Closed", "Pending", "Minor", "Major", "Critical"]]
+    df_elem = pd.concat([df_elem, pd.DataFrame([total], columns=df_elem.columns)], ignore_index=True)
+
+    return {"open": int(open_v), "pending": int(pending_v), "closed": int(closed_v),
+            "severity_table": df_sev, "element_table": df_elem}
 
 # ============================================================
 # DYNAMIC BURNDOWN + FORECAST (computed live from Data: Status, Date Open, Date Closed)
@@ -272,7 +236,7 @@ def render_dynamic_burndown_chart(hist, forecast_df):
     st.plotly_chart(fig, use_container_width=True)
 
 # ============================================================
-# EXECUTIVE SUMMARY VISUAL COMPONENTS (tables)
+# VISUAL COMPONENTS (tables)
 # ============================================================
 def kpi_card(title, value, color):
     st.markdown(f"""
@@ -353,53 +317,39 @@ st.sidebar.header("📈 Forecast Settings")
 forecast_weeks = st.sidebar.slider("Forecast horizon (weeks)", min_value=0, max_value=12, value=6, step=1)
 
 # ============================================================
-# SECTION 1: EXECUTIVE SUMMARY
+# SECTION 1: EXECUTIVE SUMMARY - 100% LIVE FROM DATA SHEET
 # ============================================================
 st.header("📌 Executive Summary")
+st.caption("All figures below are calculated live from the **Data** sheet. The Dashboard sheet (if present) is not used.")
 
-summary = parse_dashboard_sheet(file_bytes, "Dashboard") if "Dashboard" in sheet_names else None
-fallback_used = False
-if summary is None:
-    if all(c in df_data_full.columns for c in ["Type", "Status", "Severity"]):
-        summary = compute_fallback_summary(df_data_full)
-        fallback_used = True
+summary = compute_live_summary(df_data_full)
 
-if summary:
-    if fallback_used:
-        st.warning("The **Dashboard** sheet could not be found (or interpreted). "
-                    "KPI cards and breakdown tables were computed from the **Data** sheet instead.")
+c1, c2, c3 = st.columns(3)
+with c1: kpi_card("OPEN DEFECTS", summary["open"], "#b03a2e")
+with c2: kpi_card("PENDING CONFIRMATION", summary["pending"], "#9a6a06")
+with c3: kpi_card("CLOSED DEFECTS", summary["closed"], "#1e7e45")
 
-    c1, c2, c3 = st.columns(3)
-    with c1: kpi_card("OPEN DEFECTS", summary.get("open", "N/A"), "#b03a2e")
-    with c2: kpi_card("PENDING CONFIRMATION", summary.get("pending", "N/A"), "#9a6a06")
-    with c3: kpi_card("CLOSED DEFECTS", summary.get("closed", "N/A"), "#1e7e45")
+st.markdown("####")
+left, right = st.columns([1, 1.3])
 
+with left:
+    st.subheader("Status / Severity")
+    render_severity_table(summary["severity_table"])
     st.markdown("####")
-    left, right = st.columns([1, 1.3])
+    st.subheader("Element Type")
+    render_element_table(summary["element_table"])
 
-    with left:
-        st.subheader("Status / Severity")
-        if summary.get("severity_table") is not None:
-            render_severity_table(summary["severity_table"])
-        st.markdown("####")
-        st.subheader("Element Type")
-        if summary.get("element_table") is not None:
-            render_element_table(summary["element_table"])
-
-    with right:
-        hist, forecast_df, total_defects = compute_dynamic_burndown(df_data_full, forecast_periods=forecast_weeks)
-        if hist is not None:
-            render_dynamic_burndown_chart(hist, forecast_df)
-            st.caption(
-                "Solid areas = actual data, computed live from **Status**, **Date Open** and **Date Closed** "
-                "in the Data sheet. Dashed/lighter areas = forecast based on the historical closure trend. "
-                "Re-upload the Excel file after making changes in Data to refresh this chart."
-            )
-        else:
-            st.info("Not enough data with valid **Date Open** values to build the trend chart.")
-else:
-    st.error("Unable to generate the executive summary. Please verify the file contains "
-              "a **Dashboard** sheet or a **Data** sheet with the required columns.")
+with right:
+    hist, forecast_df, total_defects = compute_dynamic_burndown(df_data_full, forecast_periods=forecast_weeks)
+    if hist is not None:
+        render_dynamic_burndown_chart(hist, forecast_df)
+        st.caption(
+            "Solid areas = actual data, computed live from **Status**, **Date Open** and **Date Closed** "
+            "in the Data sheet. Dashed/lighter areas = forecast based on the historical closure trend. "
+            "Re-upload the Excel file after making changes in Data to refresh this chart."
+        )
+    else:
+        st.info("Not enough data with valid **Date Open** values to build the trend chart.")
 
 st.markdown("---")
 
@@ -408,27 +358,11 @@ st.markdown("---")
 # ============================================================
 st.header("🔍 Detailed Analysis")
 
-sheet_selected = st.sidebar.selectbox(
-    "Sheet to analyze (Detailed Analysis)", sheet_names, index=sheet_names.index(default_data_sheet)
-)
-df_raw = load_data(file_bytes, sheet_selected)
-
-required_cols = ["Conveyor", "Station", "Type", "Category", "Status", "Severity"]
-missing = [c for c in required_cols if c not in df_raw.columns]
-if missing:
-    st.error(f"The selected sheet is missing required columns: {missing}")
-    st.stop()
-
-df = df_raw.copy()
-for col in ["Status", "Severity", "Type", "Category", "Responsible"]:
-    if col in df.columns:
-        df[col] = df[col].astype(str).str.strip().replace({"nan": None, "None": None})
-
 st.sidebar.header("🔎 Filters (Detailed Analysis)")
 
 def multiselect_filter(label, col):
-    if col in df.columns:
-        options = sorted([o for o in df[col].dropna().unique().tolist()])
+    if col in df_data_full.columns:
+        options = sorted([o for o in df_data_full[col].dropna().unique().tolist()])
         return st.sidebar.multiselect(label, options, default=options)
     return None
 
@@ -438,25 +372,26 @@ status_sel = multiselect_filter("Status", "Status")
 severity_sel = multiselect_filter("Severity", "Severity")
 responsible_sel = multiselect_filter("Responsible", "Responsible")
 
-mask = pd.Series(True, index=df.index)
-if type_sel is not None: mask &= df["Type"].isin(type_sel)
-if category_sel is not None: mask &= df["Category"].isin(category_sel)
-if status_sel is not None: mask &= df["Status"].isin(status_sel)
-if severity_sel is not None: mask &= df["Severity"].isin(severity_sel)
-if responsible_sel is not None and "Responsible" in df.columns:
-    mask &= df["Responsible"].isin(responsible_sel) | df["Responsible"].isna()
+mask = pd.Series(True, index=df_data_full.index)
+if type_sel is not None: mask &= df_data_full["Type"].isin(type_sel)
+if category_sel is not None: mask &= df_data_full["Category"].isin(category_sel)
+if status_sel is not None: mask &= df_data_full["Status"].isin(status_sel)
+if severity_sel is not None: mask &= df_data_full["Severity"].isin(severity_sel)
+if responsible_sel is not None and "Responsible" in df_data_full.columns:
+    mask &= df_data_full["Responsible"].isin(responsible_sel) | df_data_full["Responsible"].isna()
 
-if "Date Open" in df.columns and df["Date Open"].notna().any():
-    min_date, max_date = df["Date Open"].min().date(), df["Date Open"].max().date()
+if "Date Open" in df_data_full.columns and df_data_full["Date Open"].notna().any():
+    min_date = df_data_full["Date Open"].min().date()
+    max_date = df_data_full["Date Open"].max().date()
     date_range = st.sidebar.date_input("Opening Date Range", value=(min_date, max_date),
                                         min_value=min_date, max_value=max_date)
     if isinstance(date_range, tuple) and len(date_range) == 2:
         start, end = date_range
-        mask &= (df["Date Open"].dt.date >= start) & (df["Date Open"].dt.date <= end)
+        mask &= (df_data_full["Date Open"].dt.date >= start) & (df_data_full["Date Open"].dt.date <= end)
 
-df_f = df[mask].copy()
+df_f = df_data_full[mask].copy()
 st.sidebar.markdown("---")
-st.sidebar.write(f"**Records displayed:** {len(df_f)} / {len(df)}")
+st.sidebar.write(f"**Records displayed:** {len(df_f)} / {len(df_data_full)}")
 
 COLOR_STATUS = {"Open": "#b03a2e", "Closed": "#1e7e45", "Confirmation pending": "#d9a406"}
 COLOR_SEV = {"Minor": "#3a7ab0", "Major": "#d9a406", "Critical": "#b03a2e"}
