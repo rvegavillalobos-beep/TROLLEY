@@ -39,13 +39,17 @@ if uploaded_file is None:
 
 file_bytes = uploaded_file.read()
 
-@st.cache_data
-def get_sheet_names(_bytes):
-    return pd.ExcelFile(io.BytesIO(_bytes)).sheet_names
+# NOTE: parameters below do NOT use a leading underscore anymore.
+# This ensures Streamlit's cache correctly detects when a NEW file
+# (different bytes) has been uploaded, instead of reusing stale results.
 
 @st.cache_data
-def load_data(_bytes, sheet_name):
-    df = pd.read_excel(io.BytesIO(_bytes), sheet_name=sheet_name)
+def get_sheet_names(file_bytes):
+    return pd.ExcelFile(io.BytesIO(file_bytes)).sheet_names
+
+@st.cache_data
+def load_data(file_bytes, sheet_name):
+    df = pd.read_excel(io.BytesIO(file_bytes), sheet_name=sheet_name)
     df.columns = [str(c).strip() for c in df.columns]
     for col in ["Date Open", "Date Closed"]:
         if col in df.columns:
@@ -67,9 +71,9 @@ def get_value(ws, r, c):
     return ws.cell(row=r, column=c).value
 
 @st.cache_data
-def parse_dashboard_sheet(_bytes, sheet_name="Dashboard"):
+def parse_dashboard_sheet(file_bytes, sheet_name="Dashboard"):
     try:
-        wb = load_workbook(io.BytesIO(_bytes), data_only=True)
+        wb = load_workbook(io.BytesIO(file_bytes), data_only=True)
     except Exception:
         return None
     if sheet_name not in wb.sheetnames:
@@ -349,7 +353,6 @@ def compute_forecast(df_week, method="auto", manual_rate=None):
 
 def render_burndown_with_forecast(df_actual, df_forecast, weeks_needed, key="burndown_forecast_default"):
     fig = go.Figure()
-    # Actual (solid stacked areas)
     fig.add_trace(go.Scatter(x=df_actual["Week"], y=df_actual["Closed"], name="Closed (Actual)", mode="lines",
                               stackgroup="actual", fillcolor="rgba(46,139,87,0.75)", line=dict(color="#2e8b57")))
     fig.add_trace(go.Scatter(x=df_actual["Week"], y=df_actual["Confirmation Pending"], name="Confirmation Pending (Actual)",
@@ -357,7 +360,6 @@ def render_burndown_with_forecast(df_actual, df_forecast, weeks_needed, key="bur
     fig.add_trace(go.Scatter(x=df_actual["Week"], y=df_actual["Open"], name="Open (Actual)", mode="lines",
                               stackgroup="actual", fillcolor="rgba(176,58,46,0.75)", line=dict(color="#b03a2e")))
 
-    # Bridge point so forecast lines connect visually with the last actual week
     bridge = pd.DataFrame([{
         "Week": df_actual["Week"].iloc[-1],
         "Closed": df_actual["Closed"].iloc[-1],
