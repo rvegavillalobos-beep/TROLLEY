@@ -273,38 +273,63 @@ def render_category_table(df_cat):
     st.markdown(html, unsafe_allow_html=True)
 
 # ============================================================
-# FORECAST LOGIC
+# FORECAST LOGIC (with guaranteed minimum of 1 week when backlog > 0)
 # ============================================================
 def compute_forecast(df_week, method="auto", manual_rate=None):
     """
     Projects the burndown forward assuming no new defects are raised.
-    Returns: (df_actual_with_weeknum, df_forecast_or_None, weeks_needed_or_None, rate)
+    Uses a cascade of methods to guarantee a minimum forecast of 1 week
+    whenever there is at least 1 defect remaining (backlog > 0):
+      1) Manual rate (if provided)
+      2) Historical linear trend (regression on Closed vs Week)
+      3) Overall average closure pace (first week vs last week)
+      4) Conservative minimum floor (assumes full backlog closes in 1 week)
+
+    Returns: (df_actual, df_forecast_or_None, weeks_needed, rate, rate_source)
+    rate_source: "manual" | "trend" | "average" | "floor" | None
     """
     df_w = df_week.copy()
     df_w["WeekNum"] = df_w["Week"].apply(parse_week_number)
     df_w = df_w.dropna(subset=["WeekNum"]).sort_values("WeekNum").reset_index(drop=True)
     if df_w.empty or len(df_w) < 2:
-        return df_w, None, None, None
+        return df_w, None, None, None, None
 
     last_row = df_w.iloc[-1]
+    first_row = df_w.iloc[0]
     backlog = last_row["Open"] + last_row["Confirmation Pending"]
     total = backlog + last_row["Closed"]
 
     if backlog <= 0:
-        return df_w, None, 0, None
+        return df_w, None, 0, None, None
 
-    if method == "manual" and manual_rate is not None:
+    rate_source = None
+
+    # --- Manual override ---
+    if method == "manual" and manual_rate is not None and manual_rate > 0:
         rate = manual_rate
+        rate_source = "manual"
     else:
+        # --- Attempt 1: linear trend (regression) ---
         x = df_w["WeekNum"].values.astype(float)
         y = df_w["Closed"].values.astype(float)
         slope, _ = np.polyfit(x, y, 1)
         rate = slope
+        rate_source = "trend"
 
-    if rate is None or rate <= 0:
-        return df_w, None, None, rate
+        # --- Attempt 2: overall average closure pace ---
+        if rate <= 0:
+            elapsed_weeks = last_row["WeekNum"] - first_row["WeekNum"]
+            total_closed_delta = last_row["Closed"] - first_row["Closed"]
+            avg_rate = (total_closed_delta / elapsed_weeks) if elapsed_weeks > 0 else 0
+            if avg_rate > 0:
+                rate = avg_rate
+                rate_source = "average"
+            else:
+                # --- Attempt 3: guaranteed minimum floor (at least 1 week) ---
+                rate = backlog  # forces exactly 1 week as a conservative minimum
+                rate_source = "floor"
 
-    weeks_needed = int(np.ceil(backlog / rate))
+    weeks_needed = max(1, int(np.ceil(backlog / rate)))
     open_ratio = last_row["Open"] / backlog if backlog > 0 else 0
     pending_ratio = last_row["Confirmation Pending"] / backlog if backlog > 0 else 0
     last_week_num = int(last_row["WeekNum"])
@@ -320,7 +345,7 @@ def compute_forecast(df_week, method="auto", manual_rate=None):
             "Open": remaining_backlog * open_ratio,
         })
     df_forecast = pd.DataFrame(forecast_rows)
-    return df_w, df_forecast, weeks_needed, rate
+    return df_w, df_forecast, weeks_needed, rate, rate_source
 
 def render_burndown_with_forecast(df_actual, df_forecast, weeks_needed, key="burndown_forecast_default"):
     fig = go.Figure()
@@ -414,7 +439,8 @@ if summary:
     st.markdown("---")
     st.subheader("🔮 Closure Forecast")
     st.caption("Projects how long it would take to close the remaining backlog, "
-               "assuming **no new defects are raised** and the closure pace stays constant.")
+               "assuming **no new defects are raised** and the closure pace stays constant. "
+               "A minimum of 1 week is always shown whenever at least 1 defect remains open.")
 
     if summary.get("week_table") is not None:
         show_forecast = st.checkbox("Show closure forecast", value=False)
@@ -431,9 +457,9 @@ if summary:
                     "Estimated defects closed per week", min_value=0.0, value=10.0, step=1.0
                 )
 
-            df_actual, df_forecast, weeks_needed, rate = compute_forecast(
+            df_actual, df_forecast, weeks_needed, rate, rate_source = compute_forecast(
                 summary["week_table"],
-                method="manual" if manual_rate else "auto",
+                method="manual" if (manual_rate and manual_rate > 0) else "auto",
                 manual_rate=manual_rate
             )
 
@@ -441,11 +467,7 @@ if summary:
                 st.success("✅ The backlog is already at zero — there is nothing left to close.")
                 render_burndown_chart(summary["week_table"], key="burndown_zero_backlog")
             elif df_forecast is None:
-                st.warning(
-                    "⚠️ Based on the historical trend, the closure rate is zero or negative. "
-                    "At the current pace, the remaining backlog would not be resolved. "
-                    "Try the **Manual** option above to test a different weekly closure rate."
-                )
+                st.warning("⚠️ Not enough historical data (fewer than 2 weeks) to build a forecast.")
                 render_burndown_chart(summary["week_table"], key="burndown_no_forecast")
             else:
                 last_actual = df_actual.iloc[-1]
@@ -458,8 +480,17 @@ if summary:
                 with cf3: kpi_card("PROJECTED CLOSURE WEEK", projected_week, "#1e7e45")
 
                 render_burndown_with_forecast(df_actual, df_forecast, weeks_needed, key="burndown_forecast_active")
+
+                source_notes = {
+                    "manual": "a manually entered closure rate.",
+                    "trend": "the historical linear closure trend (regression on actual data).",
+                    "average": "the overall average closure pace, because the recent trend was flat or negative.",
+                    "floor": "a conservative **minimum-floor estimate** (1 week), because no positive historical "
+                             "closure trend or average could be detected. Treat this number with caution — "
+                             "it does not reflect a real observed closure pace."
+                }
                 st.caption(
-                    f"Closure rate used: **{rate:.1f} defects/week**. "
+                    f"Closure rate used: **{rate:.1f} defects/week**, based on {source_notes.get(rate_source, '')} "
                     "Dashed lines represent the projected scenario. The split between Open and "
                     "Confirmation Pending in the forecast keeps the same proportion observed in the last actual week."
                 )
