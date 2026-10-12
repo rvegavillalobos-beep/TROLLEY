@@ -71,17 +71,42 @@ def test_campaign_links(wb):
     assert (linked["Status"].values == status.loc[linked["Tracker row"].astype(int)].values).all()
 
 
-def test_summary_and_burnup(wb):
+def test_summary_and_trend(wb):
     d = wb.defects
     s = metrics.summary(d, TODAY, 4)
     assert s.open + s.pending + s.closed == len(d)
     assert s.backlog == s.open + s.pending
-    hist, proj = metrics.burnup(d, TODAY, s)
-    assert hist["Found"].iloc[-1] == d["Date Open"].notna().sum()
-    assert hist["Closed"].iloc[-1] == d["Closed on"].notna().sum()
-    assert (hist["Found"] >= hist["Closed"]).all()
+    hist, fc = metrics.status_trend(d, TODAY, s.closing_rate, 6)
+    charted = d[d["Date Open"].notna() & ~(d["Status"].eq(CLOSED) & d["Closed on"].isna())]
+    last = hist.iloc[-1]
+    assert last[CLOSED] == charted["Closed on"].notna().sum()
+    assert last[CLOSED] + last[OPEN] + last[PENDING] == len(charted)
+    assert last[PENDING] == charted["Status"].eq(PENDING).sum()
+    stack = hist[[CLOSED, PENDING, OPEN]].sum(axis=1)
+    assert stack.is_monotonic_increasing          # each week's stack = everything found by then
+    assert hist[CLOSED].is_monotonic_increasing
+    assert hist["Week"].is_unique
+    assert len(fc) == 6 and fc[CLOSED].is_monotonic_increasing
+    assert (fc[[CLOSED, PENDING, OPEN]].sum(axis=1).round(6) == stack.iloc[-1]).all()
     head, sub = metrics.headline(s)
     assert str(s.backlog) in head
+
+
+def test_trend_without_pace():
+    data, _ = build()
+    wbx = read_workbook(_xlsx(data), TODAY)
+    hist, fc = metrics.status_trend(wbx.defects, TODAY, 0.0, 3)
+    assert (fc[CLOSED] == hist[CLOSED].iloc[-1]).all()   # flat when nothing is being closed
+
+
+def test_by_type(wb):
+    t = metrics.by_type(wb.defects)
+    assert t["Total"].sum() == len(wb.defects)
+    assert list(t["Total"]) == sorted(t["Total"], reverse=True)
+
+
+def test_cluster_column(wb):
+    assert set(wb.defects["Cluster"].dropna()) <= {"H", "F"}
 
 
 def test_breakdowns(wb):

@@ -54,37 +54,59 @@ def _cw_axis(fig: go.Figure, start, end) -> None:
 # ---------------------------------------------------------------------------
 # Overview
 # ---------------------------------------------------------------------------
-def burnup(hist: pd.DataFrame, proj: pd.DataFrame | None, today: pd.Timestamp, eta_label: str | None) -> go.Figure:
+def _rgba(hex_color: str, alpha: float) -> str:
+    h = hex_color.lstrip("#")
+    return f"rgba({int(h[0:2], 16)},{int(h[2:4], 16)},{int(h[4:6], 16)},{alpha})"
+
+
+def status_trend(hist: pd.DataFrame, fc: pd.DataFrame | None) -> go.Figure:
+    """Stacked areas per calendar week (Closed, Confirmation pending, Open) with a lighter forecast."""
+    order = (CLOSED, PENDING, OPEN)
     fig = go.Figure()
-    fig.add_trace(go.Scatter(
-        x=hist["Date"], y=hist["Closed"], name="Closed", mode="lines", line_shape="hv",
-        line=dict(color=STATUS_COLORS[CLOSED], width=2.25),
-        hovertemplate="Closed so far: %{y}<extra></extra>"))
-    fig.add_trace(go.Scatter(
-        x=hist["Date"], y=hist["Found"], name="Found", mode="lines", line_shape="hv",
-        line=dict(color=FOUND, width=2.25), fill="tonexty", fillcolor="rgba(198,58,48,0.10)",
-        customdata=(hist["Found"] - hist["Closed"]),
-        hovertemplate="Found so far: %{y}<br>Still open: %{customdata}<extra></extra>"))
-    end = hist["Date"].max()
-    if proj is not None:
+    for status in order:
         fig.add_trace(go.Scatter(
-            x=proj["Date"], y=proj["Closed"], name="Closing at the recent pace", mode="lines",
-            line=dict(color=STATUS_COLORS[CLOSED], width=2, dash="dot"),
-            hovertemplate="Projected closed: %{y:.0f}<extra></extra>"))
-        end = proj["Date"].max()
-        if eta_label:
-            fig.add_annotation(x=proj["Date"].iloc[-1], y=proj["Closed"].iloc[-1], text=eta_label,
-                               showarrow=False, xanchor="right", yanchor="bottom", yshift=8,
-                               font=dict(size=13, color=INK))
-    fig.add_vline(x=today, line=dict(color=AXIS, width=1))
-    fig.add_annotation(x=today, y=0, yref="paper", text="Today", showarrow=False,
-                       xanchor="right", yanchor="bottom", xshift=-4, yshift=4, font=dict(size=12, color=MUTED))
-    style(fig, 360)
-    fig.update_layout(hovermode="x unified")
-    _cw_axis(fig, hist["Date"].min(), end)
-    fig.update_xaxes(range=[hist["Date"].min() - pd.Timedelta(days=2), end + pd.Timedelta(days=4)],
-                     showspikes=True, spikemode="across", spikethickness=1, spikecolor=AXIS, spikedash="solid")
+            x=hist["Week"], y=hist[status], name=STATUS_LABELS[status], legendgroup=status,
+            mode="lines", stackgroup="actual", line=dict(color=STATUS_COLORS[status], width=1.5),
+            fillcolor=_rgba(STATUS_COLORS[status], 0.78),
+            hovertemplate=STATUS_LABELS[status] + ": %{y:.0f}<extra></extra>"))
+    if fc is not None and len(fc):
+        joined = pd.concat([hist.iloc[[-1]], fc], ignore_index=True)
+        for status in order:
+            fig.add_trace(go.Scatter(
+                x=joined["Week"], y=joined[status], name=STATUS_LABELS[status], legendgroup=status,
+                showlegend=False, mode="lines", stackgroup="forecast",
+                line=dict(color=STATUS_COLORS[status], width=1.5, dash="dash"),
+                fillcolor=_rgba(STATUS_COLORS[status], 0.24),
+                hovertemplate=STATUS_LABELS[status] + " (forecast): %{y:.0f}<extra></extra>"))
+        start = hist["Week"].iloc[-1]
+        weeks = joined["Week"].tolist()
+        fig.add_shape(type="line", xref="x", yref="paper", x0=start, x1=start, y0=0, y1=1,
+                      line=dict(color=MUTED, width=1, dash="dot"))
+        fig.add_annotation(x=weeks[len(weeks) // 2], y=1.06, xref="x", yref="paper", text="FORECAST",
+                           showarrow=False, font=dict(family=FONT, size=14, color=INK),
+                           bgcolor="rgba(255,255,255,0.9)", bordercolor=MUTED, borderwidth=1, borderpad=5)
+    style(fig, 460, top=44)
+    fig.update_layout(hovermode="x unified",
+                      legend=dict(orientation="h", x=0, xanchor="left", y=-0.16, yanchor="top"))
+    fig.update_xaxes(type="category", showgrid=False, title_text="Week", tickfont=dict(color=INK_2, size=12))
     fig.update_yaxes(rangemode="tozero", title_text="Defects")
+    return fig
+
+
+def element_types(t: pd.DataFrame) -> go.Figure:
+    """Status by element type: stacked columns, closed at the bottom."""
+    fig = go.Figure()
+    for status in (CLOSED, PENDING, OPEN):
+        fig.add_trace(go.Bar(x=t["Type"], y=t[status], name=STATUS_LABELS[status],
+                             marker=dict(color=STATUS_COLORS[status], line=_gap_line()),
+                             hovertemplate="%{x}<br>" + STATUS_LABELS[status] + ": %{y}<extra></extra>"))
+    fig.add_trace(go.Scatter(x=t["Type"], y=t["Total"], mode="text", text=t["Total"].astype(str),
+                             textposition="top center", textfont=dict(color=INK, size=13),
+                             showlegend=False, hoverinfo="skip", cliponaxis=False))
+    style(fig, 380)
+    fig.update_layout(barmode="stack", bargap=0.3)
+    fig.update_xaxes(type="category", showgrid=False, tickfont=dict(color=INK, size=13))
+    fig.update_yaxes(rangemode="tozero", range=[0, max(t["Total"].max(), 1) * 1.15], title_text="Defects")
     return fig
 
 

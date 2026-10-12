@@ -36,6 +36,12 @@ def test_filters_rerun(app):
     assert not app.exception, app.exception
 
 
+def test_cluster_filter(app):
+    box = next(sb for sb in app.selectbox if "All clusters" in sb.options)
+    box.select("H").run()
+    assert not app.exception, app.exception
+
+
 def test_empty_state(monkeypatch):
     monkeypatch.delenv("TROLLEY_XLSX_PATH", raising=False)
     at = st_testing.AppTest.from_file("../app.py", default_timeout=60)

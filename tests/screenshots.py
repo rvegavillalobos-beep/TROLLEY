@@ -56,6 +56,8 @@ with sync_playwright() as p:
             logs.append(f"line map points: {pts.count()}")
             if pts.count():
                 # drag a selection box across the middle of the map; the picked defects get listed below it
+                page.locator(".st-key-linemap").scroll_into_view_if_needed()
+                page.wait_for_timeout(800)
                 plot = page.locator(".st-key-linemap .js-plotly-plot .nsewdrag").first.bounding_box()
                 page.mouse.move(plot["x"] + plot["width"] * 0.45, plot["y"] + 10)
                 page.mouse.down()

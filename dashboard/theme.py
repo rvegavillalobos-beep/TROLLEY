@@ -30,8 +30,10 @@ RAIL = "#323A41"
 ROLLER = "#4A535B"
 
 # --- status (state) ---------------------------------------------------------
-STATUS_COLORS = {OPEN: "#C63A30", PENDING: "#2F6DB5", CLOSED: "#2F8A57"}
-STATUS_LABELS = {OPEN: "Open", PENDING: "Awaiting confirmation", CLOSED: "Closed"}
+# Red / amber / green: the format management already reads in the weekly slides.
+STATUS_COLORS = {OPEN: "#B03A2E", PENDING: "#D9A406", CLOSED: "#2E8B57"}
+STATUS_TEXT = {OPEN: "#B03A2E", PENDING: "#946604", CLOSED: "#1E7E45"}  # darker steps for numbers on the page
+STATUS_LABELS = {OPEN: "Open", PENDING: "Confirmation pending", CLOSED: "Closed"}
 
 # --- severity (ordered: caution → warning → danger) -------------------------
 SEVERITY_LIGHT = {CRITICAL: "#962028", MAJOR: "#CC5418", MINOR: "#D6A934", UNASSIGNED: "#A9AEB2"}
@@ -97,13 +99,6 @@ h1, h2, h3, h4 {{ font-family: {FONT_COND} !important; letter-spacing: 0.005em; 
               line-height:1.04; color:var(--ink); max-width:24ch; margin:0 0 0.6rem; text-wrap:balance; }}
 .lead-sub {{ font-size:1.15rem; line-height:1.5; color:var(--ink-2); max-width:68ch; margin:0; }}
 
-.pbar {{ display:flex; gap:2px; height:16px; margin:1.6rem 0 0.55rem; }}
-.pbar span {{ display:block; height:100%; min-width:3px; }}
-.pbar span:first-child {{ border-radius:4px 0 0 4px; }}
-.pbar span:last-child {{ border-radius:0 4px 4px 0; }}
-.pbar span:only-child {{ border-radius:4px; }}
-.pkey {{ display:flex; gap:1.6rem; flex-wrap:wrap; font-size:0.95rem; color:var(--ink-2); }}
-.pkey b {{ color:var(--ink); font-weight:600; }}
 .sw {{ display:inline-block; width:10px; height:10px; border-radius:2px; margin-right:0.4rem; vertical-align:baseline; }}
 
 .facts {{ display:grid; grid-template-columns:repeat(4, minmax(0,1fr)); margin:1.8rem 0 0.4rem;
@@ -117,6 +112,15 @@ h1, h2, h3, h4 {{ font-family: {FONT_COND} !important; letter-spacing: 0.005em; 
   .facts {{ grid-template-columns:repeat(2, minmax(0,1fr)); }}
   .facts > div:nth-child(3) {{ border-left:none; padding-left:0; }}
 }}
+
+/* Overview header: title + the three status counts management reads first */
+.ov-title {{ font-family:{FONT_COND}; font-weight:600; font-size:clamp(2rem, 3.4vw, 2.9rem); line-height:1;
+             color:var(--ink); margin:0 0 1.1rem; }}
+.kpis {{ display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:0 2rem; margin:0 0 1.6rem; }}
+.kpis > div {{ border-top:4px solid var(--hair); padding-top:0.55rem; }}
+.kpis .l {{ font-size:0.95rem; color:var(--ink-2); }}
+.kpis .v {{ font-family:{FONT_COND}; font-weight:600; font-size:clamp(2.6rem, 4.6vw, 3.8rem); line-height:1.05; }}
+.kpis .s {{ font-size:0.88rem; color:var(--muted); }}
 
 /* Section headings */
 .sec {{ margin: 0.2rem 0 0.4rem; }}
@@ -176,19 +180,18 @@ def lead(head: str, sub: str) -> str:
     return f'<p class="lead-head">{esc(head)}</p><p class="lead-sub">{esc(sub)}</p>'
 
 
-def progress(closed: int, pending: int, open_: int) -> str:
-    total = max(closed + pending + open_, 1)
-    segs = [(CLOSED, closed), (PENDING, pending), (OPEN, open_)]
-    bar = "".join(
-        f'<span style="flex:{n} 1 0;background:{STATUS_COLORS[k]}" title="{STATUS_LABELS[k]}: {n}"></span>'
-        for k, n in segs if n > 0
-    )
-    keys = "".join(
-        f'<span><i class="sw" style="background:{STATUS_COLORS[k]}"></i>{STATUS_LABELS[k]} <b>{n}</b>'
-        + (f" ({n / total:.0%})" if k == CLOSED else "") + "</span>"
-        for k, n in segs
-    )
-    return f'<div class="pbar" role="img" aria-label="{closed} closed, {pending} awaiting confirmation, {open_} open">{bar}</div><div class="pkey">{keys}</div>'
+def overview_title(text: str) -> str:
+    return f'<p class="ov-title">{esc(text)}</p>'
+
+
+def kpis(open_: int, pending: int, closed: int) -> str:
+    total = max(open_ + pending + closed, 1)
+    cells = [(OPEN, "Open defects", open_), (PENDING, "Pending confirmation", pending), (CLOSED, "Closed defects", closed)]
+    html_cells = "".join(
+        f'<div style="border-top-color:{STATUS_COLORS[k]}"><div class="l">{label}</div>'
+        f'<div class="v" style="color:{STATUS_TEXT[k]}">{n}</div><div class="s">{n / total:.0%} of {total}</div></div>'
+        for k, label, n in cells)
+    return f'<div class="kpis">{html_cells}</div>'
 
 
 def facts(items: list[tuple[str, str, str]]) -> str:
@@ -204,7 +207,7 @@ def linemap_legend() -> str:
     items = "".join(
         f'<span><i style="background:{SEVERITY_DARK[s]}"></i>{s}</span>' for s in (CRITICAL, MAJOR, MINOR, UNASSIGNED)
     )
-    items += f'<span><i style="background:transparent;box-shadow:inset 0 0 0 2px {BAND_INK}"></i>Outlined: fixed, awaiting confirmation</span>'
+    items += f'<span><i style="background:transparent;box-shadow:inset 0 0 0 2px {BAND_INK}"></i>Outlined: confirmation pending</span>'
     return f'<div class="lm-legend">{items}</div>'
 
 

@@ -59,6 +59,7 @@ def build(n: int = 160, seed: int = SEED) -> tuple[pd.DataFrame, pd.DataFrame]:
             "Status": status, "Severity": sev, "Date Open": opened, "Date Closed": closed,
             "Responsible": rng.choice(np.array(OWNERS, dtype=object)),
             "Comments": TEMPLATES[cat].format(c=conveyor or station, s=station) if rng.random() < 0.7 else None,
+            "Cluster": "F" if station.endswith(" F") or station.startswith("FT") else rng.choice(["H", "H", "F"]),
         })
     data = pd.DataFrame(rows)
     # the usual human touches

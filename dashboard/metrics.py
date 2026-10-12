@@ -6,7 +6,7 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 
-from .data import CLOSED, OPEN, PENDING, SEVERITIES, CRITICAL, MAJOR
+from .data import CLOSED, CRITICAL, MAJOR, OPEN, PENDING, SEVERITIES, iso_week_label
 
 AGE_BUCKETS = [(0, 7, "0–7 days"), (8, 14, "8–14 days"), (15, 30, "15–30 days"),
                (31, 60, "31–60 days"), (61, 10_000, "Over 60 days")]
@@ -92,7 +92,7 @@ def headline(s: Summary) -> tuple[str, str]:
 
     parts = []
     if s.top_category and s.backlog:
-        parts.append(f"{s.top_category} accounts for {s.top_category_open} of them.")
+        parts.append(f"{s.top_category} accounts for {s.top_category_open} of the {s.backlog} not closed.")
     w = s.window_weeks
     if s.found_in_window or s.closed_in_window:
         trend = ("the backlog grew" if s.found_in_window > s.closed_in_window
@@ -108,32 +108,65 @@ def headline(s: Summary) -> tuple[str, str]:
 # ---------------------------------------------------------------------------
 # Trend
 # ---------------------------------------------------------------------------
-def burnup(df: pd.DataFrame, today: pd.Timestamp, s: Summary) -> tuple[pd.DataFrame, pd.DataFrame | None]:
-    """Cumulative found and closed per day, plus a projection of the closed line.
+def status_trend(df: pd.DataFrame, today: pd.Timestamp, rate: float,
+                 horizon: int = 6) -> tuple[pd.DataFrame, pd.DataFrame | None]:
+    """Weekly snapshot of Closed / Confirmation pending / Open, plus a forecast.
 
-    The projection extends the recent closing pace until it reaches today's
-    found total, i.e. assuming nothing new is found.
+    One checkpoint per calendar week (Sunday) and today. At each checkpoint an
+    item counts as Closed if it was closed by then; otherwise it counts as
+    Confirmation pending if that is its status today, else Open. So the height
+    of each stack is everything found by that week.
+
+    The forecast applies the recent closing pace (per week) to what's open
+    today and splits the rest in today's open / pending proportion, assuming
+    nothing new is found.
     """
     today = today.normalize()
-    opened = df["Date Open"].dropna()
-    if opened.empty:
-        return pd.DataFrame(columns=["Date", "Found", "Closed"]), None
-    start = opened.min()
-    days = pd.date_range(start, max(today, opened.max()), freq="D")
-    found = opened.value_counts().reindex(days, fill_value=0).cumsum()
-    closed_dates = df["Closed on"].dropna()
-    closed = closed_dates.value_counts().reindex(days, fill_value=0).cumsum()
-    hist = pd.DataFrame({"Date": days, "Found": found.values, "Closed": closed.values})
+    cols = ["Date", "Week", CLOSED, PENDING, OPEN]
+    d = df[df["Date Open"].notna() & ~(df["Status"].eq(CLOSED) & df["Closed on"].isna())]
+    if d.empty:
+        return pd.DataFrame(columns=cols), None
+    start = d["Date Open"].min().normalize()
+    cps = pd.date_range(start, today, freq="W-SUN")
+    if len(cps) == 0 or cps[-1] < today:
+        cps = cps.append(pd.DatetimeIndex([today]))
 
-    proj = None
-    rate = s.closing_rate
-    now_found, now_closed = int(hist["Found"].iloc[-1]), int(hist["Closed"].iloc[-1])
-    gap = now_found - now_closed
-    if rate > 0 and gap > 0:
-        weeks = gap / rate
-        end = today + pd.Timedelta(days=int(np.ceil(weeks * 7)))
-        proj = pd.DataFrame({"Date": [today, end], "Closed": [now_closed, now_found]})
-    return hist, proj
+    opened = d["Date Open"].to_numpy(dtype="datetime64[ns]")
+    closed = d["Closed on"].to_numpy(dtype="datetime64[ns]")
+    pending_now = d["Status"].eq(PENDING).to_numpy()
+    rows = []
+    for cp in cps:
+        t = np.datetime64(cp, "ns")
+        found = opened <= t
+        done = found & ~np.isnat(closed) & (closed <= t)
+        active = found & ~done
+        rows.append({"Date": cp, CLOSED: int(done.sum()), PENDING: int((active & pending_now).sum()),
+                     OPEN: int((active & ~pending_now).sum())})
+    hist = pd.DataFrame(rows)
+    hist["Week"] = hist["Date"].map(iso_week_label)
+    hist = hist[cols]
+
+    fc = None
+    if horizon > 0:
+        last = hist.iloc[-1]
+        remaining = int(last[OPEN] + last[PENDING])
+        total = int(last[CLOSED]) + remaining
+        share_open = last[OPEN] / remaining if remaining else 0.0
+        rows = []
+        for i in range(1, horizon + 1):
+            when = last["Date"] + pd.Timedelta(weeks=i)
+            c = min(last[CLOSED] + max(rate, 0.0) * i, total)
+            rest = total - c
+            rows.append({"Date": when, "Week": iso_week_label(when), CLOSED: c,
+                         PENDING: rest * (1 - share_open), OPEN: rest * share_open})
+        fc = pd.DataFrame(rows)[cols]
+    return hist, fc
+
+
+def by_type(df: pd.DataFrame) -> pd.DataFrame:
+    t = pd.crosstab(df["Type"], df["Status"]).reindex(columns=[CLOSED, PENDING, OPEN], fill_value=0)
+    t["Total"] = t.sum(axis=1)
+    return t.sort_values(["Total", OPEN], ascending=False).reset_index()
 
 
 def weekly_flow(df: pd.DataFrame, today: pd.Timestamp) -> pd.DataFrame:

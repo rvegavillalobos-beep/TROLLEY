@@ -6,11 +6,14 @@ measurement-campaign sheet (*Faults to fix*), and turns them into:
 
 | Tab | For | What it shows |
 |---|---|---|
-| **Overview** | Management | A one-line status, closed/awaiting/open progress, the **line map** (every open defect on its station, in line order), found vs closed with a projection, what's left by category and owner, how long closing takes |
+| **Overview** | Management | Header in the weekly-slide format: open / pending confirmation / closed counts and the *Defect Status Trend & Burndown per Calendar Week* with forecast. Then the **line map** (every open defect on its station, in line order), status by element type, what's left by category and owner, how long closing takes |
 | **Follow-up** | The weekly review | Filters, owner board, aging, found/closed per week, hot spots (conveyor × category), the action list with downloads |
 | **Measurement campaign** | Cluster-movement work | Campaign faults linked to their current tracker status, by PLC, fault type and cluster, measured peak acceleration against the limit (0.16 g by default), remeasure list |
 | **Data health** | Whoever maintains the Excel | Every gap or inconsistency with the Excel row number to fix, plus what the app corrects on its own |
 | **All records** | Everyone | Search and download |
+
+If the Data sheet has a **Cluster** column (e.g. H / F), a cluster selector appears
+in the sidebar and the whole dashboard, including the header, shows one cluster.
 
 The Excel file is never changed. Cleaning rules (e.g. *Parameters* counts as
 *Parametrization*, blank severity counts as *Unassigned*, `Maintenance -> LEAD`

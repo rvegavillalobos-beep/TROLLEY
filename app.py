@@ -79,9 +79,11 @@ with st.sidebar:
     if st.button("Reload data", icon=":material/refresh:", width="stretch"):
         st.cache_data.clear()
         st.rerun()
+    cluster_slot = st.container()
     st.markdown("### Settings")
     window = st.slider("Pace window (weeks)", 2, 8, 4,
-                       help="Recent weeks used for the closing pace, the trend sentence and the projection.")
+                       help="Recent weeks used for the closing pace that drives the forecast and the trend sentence.")
+    horizon = st.slider("Forecast horizon (weeks)", 0, 12, 6)
     limit_g = st.number_input("Acceleration limit (g)", min_value=0.01, max_value=2.0, value=0.16, step=0.01,
                               format="%.2f", help="Used in the measurement campaign tab.")
 
@@ -117,6 +119,22 @@ except WorkbookError as exc:
     st.stop()
 
 df = wb.defects
+campaign = wb.campaign
+cluster = None
+clusters = sorted(df["Cluster"].dropna().unique()) if "Cluster" in df else []
+if clusters:
+    with cluster_slot:
+        st.markdown("### Cluster")
+        pick = st.selectbox("Cluster", ["All clusters"] + clusters, label_visibility="collapsed",
+                            help="From the Cluster column of the Data sheet.")
+    if pick != "All clusters":
+        cluster = pick
+        df = df[df["Cluster"].eq(cluster)].reset_index(drop=True)
+        if campaign is not None:
+            campaign = campaign[campaign["Cluster"].astype(str).str.upper().eq(str(cluster).upper())]
+if df.empty:
+    st.info("No defects for this selection.", icon=":material/filter_alt_off:")
+    st.stop()
 latest = pd.concat([df["Date Open"], df["Date Closed"]]).max()
 saved = loaded.modified.astimezone().strftime("%d %b %Y, %H:%M") if loaded.modified else datetime.now().strftime("%d %b %Y, %H:%M")
 st.html(theme.masthead(
@@ -181,18 +199,38 @@ def fmt_num(v: float) -> str:
 # ---------------------------------------------------------------------------
 with t_over:
     s = metrics.summary(df, today, window)
-    head, sub = metrics.headline(s)
+    _, sub = metrics.headline(s)
+
+    # Header: the three status counts and the weekly trend, in the format of the weekly slides
+    st.html(theme.overview_title("Defect status" + (f", cluster {cluster}" if cluster else ""))
+            + theme.kpis(s.open, s.pending, s.closed))
+    hist, fc = metrics.status_trend(df, today, s.closing_rate, horizon)
+    if horizon and s.backlog:
+        if s.closing_rate > 0:
+            fc_note = (f" Forecast: the recent closing pace ({fmt_num(s.closing_rate)} a week) applied to what's "
+                       "open today, assuming nothing new is found.")
+        else:
+            fc_note = f" Forecast stays flat: nothing was closed in the last {s.window_weeks} weeks."
+    else:
+        fc_note = ""
+    st.html(theme.section("Defect Status Trend & Burndown per Calendar Week", sub + fc_note))
+    if len(hist):
+        plot(charts.status_trend(hist, fc if horizon else None), "trend")
+    excluded = int((df["Status"].eq(CLOSED) & df["Date Closed"].isna()).sum() + df["Date Open"].isna().sum())
+    if excluded:
+        st.html(f'<p class="foot">{excluded} rows are left out of this chart because a date is missing. '
+                "See Data health.</p>")
+
     crit_label = ("Critical defect still open" if s.critical_open == 1 else "Critical defects still open") + (
         f", plus {s.major_open} major" if s.major_open else "")
-    fact_items = [
+    st.html(theme.facts([
         (str(s.critical_open), "", crit_label),
         (fmt_num(s.median_days_to_close) if s.median_days_to_close is not None else "–", "days",
          "Median time from open to close"),
         (fmt_num(s.oldest_open_days) if s.oldest_open_days is not None else "–", "days",
          f"Oldest open item ({s.oldest_open_label})" if s.oldest_open_label else "Oldest open item"),
         (fmt_num(s.closing_rate), "per week", f"Closing pace over the last {s.window_weeks} weeks"),
-    ]
-    st.html(theme.lead(head, sub) + theme.progress(s.closed, s.pending, s.open) + theme.facts(fact_items))
+    ]))
 
     st.write("")
     with st.container(key="linemap"):
@@ -216,30 +254,13 @@ with t_over:
     st.write("")
     c1, c2 = st.columns([1.2, 1], gap="large")
     with c1:
-        hist, proj = metrics.burnup(df, today, s)
-        eta_label = None
-        if s.eta is not None and s.backlog:
-            eta_label = f"Clear by {s.eta.strftime('%d %b')} (CW{s.eta.isocalendar()[1]:02d})"
-        if proj is not None and s.eta is not None:
-            note = (f"The shaded gap is what's still open. At the recent pace of {fmt_num(s.closing_rate)} a week, "
-                    f"today's backlog would be cleared around CW{s.eta.isocalendar()[1]:02d}, "
-                    "assuming nothing new is found.")
-        elif s.backlog:
-            note = f"Nothing was closed in the last {s.window_weeks} weeks, so there's no pace to project."
-        else:
-            note = "Everything found so far is closed."
-        st.html(theme.section("Found vs closed", note))
-        if len(hist):
-            plot(charts.burnup(hist, proj, today, eta_label), "burnup")
-        excluded = int((df["Status"].eq(CLOSED) & df["Date Closed"].isna()).sum() + df["Date Open"].isna().sum())
-        if excluded:
-            st.html(f'<p class="foot">{excluded} rows are left out of this chart because a date is missing. '
-                    "See Data health.</p>")
+        st.html(theme.section("Status by element type", "Everything logged, by type of element."))
+        plot(charts.element_types(metrics.by_type(df)), "types")
     with c2:
         cat = metrics.by_category(df)
         done = cat[cat["Remaining"] == 0]["Category"].tolist()
         st.html(theme.section("What's left, by category",
-                              "Open and awaiting confirmation, with everything logged in that category for scale."
+                              "Open and confirmation pending, against everything logged in that category."
                               + (f" Fully closed: {', '.join(done)}." if done else "")))
         if (cat["Remaining"] > 0).any():
             plot(charts.categories(cat), "cat")
@@ -287,7 +308,7 @@ with t_follow:
             column_config={
                 OPEN: st.column_config.ProgressColumn("Open", format="%d", min_value=0,
                                                       max_value=int(max(board[OPEN].max(), 1))),
-                PENDING: st.column_config.NumberColumn("Awaiting confirmation", format="%d"),
+                PENDING: st.column_config.NumberColumn("Confirmation pending", format="%d"),
                 "Critical": st.column_config.NumberColumn("Critical", format="%d"),
                 "Major": st.column_config.NumberColumn("Major", format="%d"),
                 "Oldest (days)": st.column_config.NumberColumn("Oldest (days)", format="%d"),
@@ -325,8 +346,10 @@ with t_follow:
 # Measurement campaign
 # ---------------------------------------------------------------------------
 with t_camp:
-    c = wb.campaign
-    if c is None or c.empty:
+    c = campaign
+    if wb.campaign is not None and (c is None or c.empty):
+        st.info(f"No campaign faults for cluster {cluster}.", icon=":material/filter_alt_off:")
+    elif c is None or c.empty:
         st.info("This workbook has no campaign sheet (a sheet with 'Problem description' and 'Fix status' columns).",
                 icon=":material/info:")
     else:
@@ -341,7 +364,7 @@ with t_camp:
             f"The measurement campaign ('{wb.campaign_sheet}') logged {len(c)} faults. {linked} of them match a row "
             f"in '{wb.defect_sheet}' by description, so their status here is the current one from the tracker.")
             + theme.facts([
-                (str(n_left), "", "Still open or awaiting confirmation"),
+                (str(n_left), "", "Open or confirmation pending"),
                 (str(n_rem), "", "Marked for remeasurement"),
                 (f"{n_meas} of {len(c)}", "", "Have a measured value"),
                 (f"{limit_ms2:.2f}", "m/s²", f"Limit ({limit_g:.2f} g)"),

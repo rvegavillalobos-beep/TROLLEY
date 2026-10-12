@@ -237,6 +237,10 @@ def clean_defects(raw: pd.DataFrame, today: pd.Timestamp) -> tuple[pd.DataFrame,
     df["Responsible"] = _clean_text(raw["Responsible"])
     df["Owner"] = df["Responsible"].map(owner_from_responsible)
     df["Comments"] = _clean_text(raw["Comments"])
+    # Optional: a Cluster column (e.g. H / F) lets the app show one cluster at a time.
+    cl = next((c for c in raw.columns if c.strip().lower() == "cluster"), None)
+    df["Cluster"] = _clean_text(raw[cl]).map(lambda v: v.upper() if isinstance(v, str) and len(v) <= 3 else v) \
+        if cl else None
     df["Date Open"] = pd.to_datetime(raw["Date Open"], errors="coerce").dt.normalize()
     df["Date Closed"] = pd.to_datetime(raw["Date Closed"], errors="coerce").dt.normalize()
 
