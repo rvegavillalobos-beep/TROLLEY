@@ -1,0 +1,49 @@
+[server]
+# Serves ./static (the self-hosted Barlow fonts) at app/static/
+enableStaticServing = true
+
+[browser]
+gatherUsageStats = false
+
+[theme]
+base = "light"
+primaryColor = "#1B2024"
+backgroundColor = "#F3F3F0"
+secondaryBackgroundColor = "#E8E9E5"
+textColor = "#1B2024"
+linkColor = "#2F6DB5"
+borderColor = "#D9DAD5"
+showWidgetBorder = true
+baseRadius = "small"
+baseFontSize = 15
+font = "Barlow, 'Segoe UI', sans-serif"
+headingFont = "'Barlow Condensed', Barlow, sans-serif"
+
+[[theme.fontFaces]]
+family = "Barlow"
+url = "app/static/fonts/Barlow-Regular.woff2"
+weight = 400
+
+[[theme.fontFaces]]
+family = "Barlow"
+url = "app/static/fonts/Barlow-Medium.woff2"
+weight = 500
+
+[[theme.fontFaces]]
+family = "Barlow"
+url = "app/static/fonts/Barlow-SemiBold.woff2"
+weight = 600
+
+[[theme.fontFaces]]
+family = "Barlow Condensed"
+url = "app/static/fonts/BarlowCondensed-Medium.woff2"
+weight = 500
+
+[[theme.fontFaces]]
+family = "Barlow Condensed"
+url = "app/static/fonts/BarlowCondensed-SemiBold.woff2"
+weight = 600
+
+[client]
+# Hide the Deploy button and developer menu items for viewers
+toolbarMode = "minimal"

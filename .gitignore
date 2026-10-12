@@ -1,0 +1,13 @@
+# Secrets and data never go into this public repo
+.streamlit/secrets.toml
+*.xlsx
+*.xlsm
+*.xls
+*.csv
+!tests/**/*.py
+
+__pycache__/
+*.pyc
+.pytest_cache/
+screenshots/
+.venv/
