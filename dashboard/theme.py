@@ -122,6 +122,11 @@ h1, h2, h3, h4 {{ font-family: {FONT_COND} !important; letter-spacing: 0.005em; 
 .kpis .v {{ font-family:{FONT_COND}; font-weight:600; font-size:clamp(2.6rem, 4.6vw, 3.8rem); line-height:1.05; }}
 .kpis .s {{ font-size:0.88rem; color:var(--muted); }}
 
+/* Screenshot panel: counts + trend on pure white for slides */
+.st-key-snapshot {{ background:#FFFFFF; border-radius:6px; padding:1.3rem 1.5rem 0.6rem; }}
+.st-key-snapshot .kpis {{ margin-bottom:1.3rem; }}
+.snap-title {{ font-family:{FONT_COND}; font-weight:600; font-size:1.35rem; color:var(--ink); margin:0; }}
+
 /* Section headings */
 .sec {{ margin: 0.2rem 0 0.4rem; }}
 .sec h3 {{ font-family:{FONT_COND}; font-weight:600; font-size:1.45rem; line-height:1.15; margin:0; padding:0; color:var(--ink); }}

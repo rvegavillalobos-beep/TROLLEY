@@ -204,32 +204,22 @@ def fmt_num(v: float) -> str:
 # ---------------------------------------------------------------------------
 with t_over:
     s = metrics.summary(df, today, window)
-    _, sub = metrics.headline(s)
-
-    # Header: the three status counts and the weekly trend, in the format of the weekly slides
-    st.html(theme.overview_title("Defect status" + (f", cluster {cluster}" if cluster else ""))
-            + theme.kpis(s.open, s.pending, s.closed))
     hist = metrics.weekly_status(df, today)
     trend = metrics.trend_pace(hist)
-    use_trend = basis.startswith("Trend")
-    pace = trend if use_trend else s.closing_rate
+    pace = trend if basis.startswith("Trend") else s.closing_rate
     fc = metrics.forecast(hist, pace, horizon)
-    fc_note = ""
-    if horizon and s.backlog and len(hist):
-        if pace > 0:
-            basis_txt = (f"the closing trend since {hist['Week'].iloc[0]}" if use_trend
-                         else f"the closing pace of the last {s.window_weeks} weeks")
-            fc_note = (f" Forecast: {basis_txt} ({fmt_num(pace)} a week) applied to what's open today, "
-                       "assuming nothing new is found.")
-        else:
-            fc_note = " Forecast stays flat: no closing pace to project."
-    st.html(theme.section("Defect Status Trend & Burndown per Calendar Week", sub + fc_note))
-    if len(hist):
-        plot(charts.status_trend(hist, fc if horizon else None), "trend")
+
+    st.html(theme.overview_title("Defect status" + (f", cluster {cluster}" if cluster else "")))
+    # Counts + trend on one pure-white panel, so a single screenshot drops straight into a slide
+    with st.container(key="snapshot"):
+        st.html(theme.kpis(s.open, s.pending, s.closed)
+                + '<p class="snap-title">Defect Status Trend &amp; Burndown per Calendar Week</p>')
+        if len(hist):
+            plot(charts.status_trend(hist, fc if horizon else None), "trend")
     excluded = int((df["Status"].eq(CLOSED) & df["Date Closed"].isna()).sum() + df["Date Open"].isna().sum())
     if excluded:
-        st.html(f'<p class="foot">{excluded} rows are left out of this chart because a date is missing. '
-                "See Data health.</p>")
+        st.html(f'<p class="foot" style="margin-top:0.5rem">{excluded} rows are left out of the trend because a '
+                "date is missing. See Data health.</p>")
 
     crit_label = ("Critical defect still open" if s.critical_open == 1 else "Critical defects still open") + (
         f", plus {s.major_open} major" if s.major_open else "")

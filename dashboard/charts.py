@@ -85,7 +85,7 @@ def status_trend(hist: pd.DataFrame, fc: pd.DataFrame | None) -> go.Figure:
         fig.add_annotation(x=weeks[len(weeks) // 2], y=1.06, xref="x", yref="paper", text="FORECAST",
                            showarrow=False, font=dict(family=FONT, size=14, color=INK),
                            bgcolor="rgba(255,255,255,0.9)", bordercolor=MUTED, borderwidth=1, borderpad=5)
-    style(fig, 460, top=44)
+    style(fig, 450, top=40)
     fig.update_layout(hovermode="x unified",
                       legend=dict(orientation="h", x=0, xanchor="left", y=-0.16, yanchor="top"))
     fig.update_xaxes(type="category", showgrid=False, title_text="Week", tickfont=dict(color=INK_2, size=12))
