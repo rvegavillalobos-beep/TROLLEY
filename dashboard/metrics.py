@@ -108,24 +108,19 @@ def headline(s: Summary) -> tuple[str, str]:
 # ---------------------------------------------------------------------------
 # Trend
 # ---------------------------------------------------------------------------
-def status_trend(df: pd.DataFrame, today: pd.Timestamp, rate: float,
-                 horizon: int = 6) -> tuple[pd.DataFrame, pd.DataFrame | None]:
-    """Weekly snapshot of Closed / Confirmation pending / Open, plus a forecast.
+def weekly_status(df: pd.DataFrame, today: pd.Timestamp) -> pd.DataFrame:
+    """Weekly snapshot of Closed / Confirmation pending / Open.
 
     One checkpoint per calendar week (Sunday) and today. At each checkpoint an
     item counts as Closed if it was closed by then; otherwise it counts as
     Confirmation pending if that is its status today, else Open. So the height
     of each stack is everything found by that week.
-
-    The forecast applies the recent closing pace (per week) to what's open
-    today and splits the rest in today's open / pending proportion, assuming
-    nothing new is found.
     """
     today = today.normalize()
     cols = ["Date", "Week", CLOSED, PENDING, OPEN]
     d = df[df["Date Open"].notna() & ~(df["Status"].eq(CLOSED) & df["Closed on"].isna())]
     if d.empty:
-        return pd.DataFrame(columns=cols), None
+        return pd.DataFrame(columns=cols)
     start = d["Date Open"].min().normalize()
     cps = pd.date_range(start, today, freq="W-SUN")
     if len(cps) == 0 or cps[-1] < today:
@@ -144,23 +139,42 @@ def status_trend(df: pd.DataFrame, today: pd.Timestamp, rate: float,
                      OPEN: int((active & ~pending_now).sum())})
     hist = pd.DataFrame(rows)
     hist["Week"] = hist["Date"].map(iso_week_label)
-    hist = hist[cols]
+    return hist[cols]
 
-    fc = None
-    if horizon > 0:
-        last = hist.iloc[-1]
-        remaining = int(last[OPEN] + last[PENDING])
-        total = int(last[CLOSED]) + remaining
-        share_open = last[OPEN] / remaining if remaining else 0.0
-        rows = []
-        for i in range(1, horizon + 1):
-            when = last["Date"] + pd.Timedelta(weeks=i)
-            c = min(last[CLOSED] + max(rate, 0.0) * i, total)
-            rest = total - c
-            rows.append({"Date": when, "Week": iso_week_label(when), CLOSED: c,
-                         PENDING: rest * (1 - share_open), OPEN: rest * share_open})
-        fc = pd.DataFrame(rows)[cols]
-    return hist, fc
+
+def trend_pace(hist: pd.DataFrame) -> float:
+    """Closures per week from a straight line fitted to the cumulative closed count.
+
+    Uses every week since the first defect, so one batch of closures entering or
+    leaving a short window doesn't swing the forecast.
+    """
+    if len(hist) < 2:
+        return 0.0
+    x = (hist["Date"] - hist["Date"].iloc[0]).dt.days.to_numpy(dtype=float) / 7
+    slope = float(np.polyfit(x, hist[CLOSED].to_numpy(dtype=float), 1)[0])
+    return max(slope, 0.0)
+
+
+def forecast(hist: pd.DataFrame, rate: float, horizon: int = 6) -> pd.DataFrame | None:
+    """Apply a closing pace (per week) to what's open at the last checkpoint.
+
+    The rest is split in the current open / pending proportion; nothing new is
+    assumed to be found.
+    """
+    if horizon <= 0 or hist.empty:
+        return None
+    last = hist.iloc[-1]
+    remaining = int(last[OPEN] + last[PENDING])
+    total = int(last[CLOSED]) + remaining
+    share_open = last[OPEN] / remaining if remaining else 0.0
+    rows = []
+    for i in range(1, horizon + 1):
+        when = last["Date"] + pd.Timedelta(weeks=i)
+        c = min(last[CLOSED] + max(rate, 0.0) * i, total)
+        rest = total - c
+        rows.append({"Date": when, "Week": iso_week_label(when), CLOSED: c,
+                     PENDING: rest * (1 - share_open), OPEN: rest * share_open})
+    return pd.DataFrame(rows)[list(hist.columns)]
 
 
 def by_type(df: pd.DataFrame) -> pd.DataFrame:

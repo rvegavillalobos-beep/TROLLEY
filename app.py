@@ -80,10 +80,15 @@ with st.sidebar:
         st.cache_data.clear()
         st.rerun()
     cluster_slot = st.container()
-    st.markdown("### Settings")
-    window = st.slider("Pace window (weeks)", 2, 8, 4,
-                       help="Recent weeks used for the closing pace that drives the forecast and the trend sentence.")
+    st.markdown("### Forecast")
     horizon = st.slider("Forecast horizon (weeks)", 0, 12, 6)
+    basis = st.radio("Closing pace", ["Trend over all weeks", "Recent weeks only"],
+                     help="Trend: a straight line through every week's closed total, so one batch of closures "
+                          "doesn't swing it. Recent: only what was closed in the recent window.")
+    st.markdown("### Settings")
+    window = st.slider("Recent window (weeks)", 2, 8, 4,
+                       help="Used for 'found vs closed lately' in the summary sentence, and for the forecast "
+                            "when the closing pace is set to recent weeks.")
     limit_g = st.number_input("Acceleration limit (g)", min_value=0.01, max_value=2.0, value=0.16, step=0.01,
                               format="%.2f", help="Used in the measurement campaign tab.")
 
@@ -204,15 +209,20 @@ with t_over:
     # Header: the three status counts and the weekly trend, in the format of the weekly slides
     st.html(theme.overview_title("Defect status" + (f", cluster {cluster}" if cluster else ""))
             + theme.kpis(s.open, s.pending, s.closed))
-    hist, fc = metrics.status_trend(df, today, s.closing_rate, horizon)
-    if horizon and s.backlog:
-        if s.closing_rate > 0:
-            fc_note = (f" Forecast: the recent closing pace ({fmt_num(s.closing_rate)} a week) applied to what's "
-                       "open today, assuming nothing new is found.")
+    hist = metrics.weekly_status(df, today)
+    trend = metrics.trend_pace(hist)
+    use_trend = basis.startswith("Trend")
+    pace = trend if use_trend else s.closing_rate
+    fc = metrics.forecast(hist, pace, horizon)
+    fc_note = ""
+    if horizon and s.backlog and len(hist):
+        if pace > 0:
+            basis_txt = (f"the closing trend since {hist['Week'].iloc[0]}" if use_trend
+                         else f"the closing pace of the last {s.window_weeks} weeks")
+            fc_note = (f" Forecast: {basis_txt} ({fmt_num(pace)} a week) applied to what's open today, "
+                       "assuming nothing new is found.")
         else:
-            fc_note = f" Forecast stays flat: nothing was closed in the last {s.window_weeks} weeks."
-    else:
-        fc_note = ""
+            fc_note = " Forecast stays flat: no closing pace to project."
     st.html(theme.section("Defect Status Trend & Burndown per Calendar Week", sub + fc_note))
     if len(hist):
         plot(charts.status_trend(hist, fc if horizon else None), "trend")
@@ -229,7 +239,9 @@ with t_over:
          "Median time from open to close"),
         (fmt_num(s.oldest_open_days) if s.oldest_open_days is not None else "–", "days",
          f"Oldest open item ({s.oldest_open_label})" if s.oldest_open_label else "Oldest open item"),
-        (fmt_num(s.closing_rate), "per week", f"Closing pace over the last {s.window_weeks} weeks"),
+        (fmt_num(trend), "per week",
+         f"Average closing pace since {hist['Week'].iloc[0] if len(hist) else 'the start'}; "
+         f"{s.closed_in_window} closed in the last {s.window_weeks} weeks"),
     ]))
 
     st.write("")

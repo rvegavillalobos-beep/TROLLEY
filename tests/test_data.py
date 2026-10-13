@@ -76,7 +76,10 @@ def test_summary_and_trend(wb):
     s = metrics.summary(d, TODAY, 4)
     assert s.open + s.pending + s.closed == len(d)
     assert s.backlog == s.open + s.pending
-    hist, fc = metrics.status_trend(d, TODAY, s.closing_rate, 6)
+    hist = metrics.weekly_status(d, TODAY)
+    pace = metrics.trend_pace(hist)
+    assert pace > 0
+    fc = metrics.forecast(hist, pace, 6)
     charted = d[d["Date Open"].notna() & ~(d["Status"].eq(CLOSED) & d["Closed on"].isna())]
     last = hist.iloc[-1]
     assert last[CLOSED] == charted["Closed on"].notna().sum()
@@ -95,8 +98,18 @@ def test_summary_and_trend(wb):
 def test_trend_without_pace():
     data, _ = build()
     wbx = read_workbook(_xlsx(data), TODAY)
-    hist, fc = metrics.status_trend(wbx.defects, TODAY, 0.0, 3)
+    hist = metrics.weekly_status(wbx.defects, TODAY)
+    fc = metrics.forecast(hist, 0.0, 3)
     assert (fc[CLOSED] == hist[CLOSED].iloc[-1]).all()   # flat when nothing is being closed
+
+
+def test_trend_pace_ignores_window_edges():
+    """A batch of closures leaving a short window must not flatten the trend pace."""
+    data, _ = build()
+    d = read_workbook(_xlsx(data), TODAY).defects
+    a = metrics.trend_pace(metrics.weekly_status(d, TODAY))
+    b = metrics.trend_pace(metrics.weekly_status(d, TODAY + pd.Timedelta(days=1)))
+    assert a > 0 and abs(a - b) / a < 0.1
 
 
 def test_by_type(wb):
