@@ -116,30 +116,42 @@ def element_types(t: pd.DataFrame) -> go.Figure:
     return fig
 
 
-def _hbar_status(df: pd.DataFrame, label_col: str, end_text: list[str], height_per: int = 34) -> go.Figure:
+def _hbar_status(df: pd.DataFrame, label_col: str, end_text: list[str], height_per: int = 34,
+                 pad: float = 1.28, total: int | None = None) -> go.Figure:
     df = df.iloc[::-1]  # biggest on top
     fig = go.Figure()
     for status in (OPEN, PENDING):
+        share = (df[status] / total).tolist() if total else [0.0] * len(df)
         fig.add_trace(go.Bar(
             y=df[label_col], x=df[status], name=STATUS_LABELS[status], orientation="h",
-            marker=dict(color=STATUS_COLORS[status], line=_gap_line()),
-            hovertemplate="%{y}<br>" + STATUS_LABELS[status] + ": %{x}<extra></extra>"))
+            marker=dict(color=STATUS_COLORS[status], line=_gap_line()), customdata=share,
+            hovertemplate="%{y}<br>" + STATUS_LABELS[status] + ": %{x}"
+                          + (" (%{customdata:.1%} of all issues)" if total else "") + "<extra></extra>"))
     totals = (df[OPEN] + df[PENDING]).tolist()
     fig.add_trace(go.Scatter(
-        y=df[label_col], x=totals, mode="text", text=["\u2002" + t for t in reversed(end_text)],
+        y=df[label_col], x=totals, mode="text",
+        text=["\u2002" + t.replace("<br>", "<br>\u2002") for t in reversed(end_text)],
         textposition="middle right",
         textfont=dict(size=12, color=INK_2), showlegend=False, hoverinfo="skip", cliponaxis=False))
     style(fig, 56 + height_per * len(df))
     fig.update_layout(barmode="stack", bargap=0.32)
-    fig.update_xaxes(showgrid=True, rangemode="tozero", range=[0, max(totals + [1]) * 1.28], title_text=None)
+    fig.update_xaxes(showgrid=True, rangemode="tozero", range=[0, max(totals + [1]) * pad], title_text=None)
     fig.update_yaxes(showgrid=False, tickfont=dict(color=INK, size=13))
     return fig
 
 
-def categories(cat: pd.DataFrame) -> go.Figure:
+def categories(cat: pd.DataFrame, total: int) -> go.Figure:
+    """Open and pending per category, each with its share of all issues logged."""
     d = cat[cat["Remaining"] > 0].reset_index(drop=True)
-    end = [f"{r.Remaining} of {r.Logged}" for r in d.itertuples()]
-    return _hbar_status(d, "Category", end)
+
+    def pct(n: int) -> str:
+        return f"{n / total:.1%}" if total else "–"
+
+    end = []
+    for o, p in zip(d[OPEN], d[PENDING]):
+        parts = ([f"{o} open ({pct(o)})"] if o else []) + ([f"{p} pending ({pct(p)})"] if p else [])
+        end.append("<br>".join(parts))
+    return _hbar_status(d, "Category", end, height_per=46, pad=1.6, total=total)
 
 
 def owners(own: pd.DataFrame) -> go.Figure:
