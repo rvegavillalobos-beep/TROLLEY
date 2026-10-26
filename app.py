@@ -262,10 +262,11 @@ with t_over:
         cat = metrics.by_category(df)
         done = cat[cat["Remaining"] == 0]["Category"].tolist()
         st.html(theme.section("What's left, by category",
-                              f"Open and pending issues per category. Percentages are of all {len(df)} issues logged."
+                              f"Open and pending validation per category. Percentages are of the {s.backlog} issues "
+                              "still open or pending validation, so together they add up to 100%."
                               + (f" Fully closed: {', '.join(done)}." if done else "")))
         if (cat["Remaining"] > 0).any():
-            plot(charts.categories(cat, len(df)), "cat")
+            plot(charts.categories(cat, s.backlog), "cat")
 
     c3, c4 = st.columns([1.2, 1], gap="large")
     with c3:

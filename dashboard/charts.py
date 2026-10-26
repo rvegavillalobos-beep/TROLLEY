@@ -117,7 +117,7 @@ def element_types(t: pd.DataFrame) -> go.Figure:
 
 
 def _hbar_status(df: pd.DataFrame, label_col: str, end_text: list[str], height_per: int = 34,
-                 pad: float = 1.28, total: int | None = None) -> go.Figure:
+                 pad: float = 1.28, total: int | None = None, share_of: str = "") -> go.Figure:
     df = df.iloc[::-1]  # biggest on top
     fig = go.Figure()
     for status in (OPEN, PENDING):
@@ -126,7 +126,7 @@ def _hbar_status(df: pd.DataFrame, label_col: str, end_text: list[str], height_p
             y=df[label_col], x=df[status], name=STATUS_LABELS[status], orientation="h",
             marker=dict(color=STATUS_COLORS[status], line=_gap_line()), customdata=share,
             hovertemplate="%{y}<br>" + STATUS_LABELS[status] + ": %{x}"
-                          + (" (%{customdata:.1%} of all issues)" if total else "") + "<extra></extra>"))
+                          + (f" (%{{customdata:.1%}} of {share_of})" if total else "") + "<extra></extra>"))
     totals = (df[OPEN] + df[PENDING]).tolist()
     fig.add_trace(go.Scatter(
         y=df[label_col], x=totals, mode="text",
@@ -141,7 +141,7 @@ def _hbar_status(df: pd.DataFrame, label_col: str, end_text: list[str], height_p
 
 
 def categories(cat: pd.DataFrame, total: int) -> go.Figure:
-    """Open and pending per category, each with its share of all issues logged."""
+    """Open and pending per category, each as a share of everything still open or pending (total)."""
     d = cat[cat["Remaining"] > 0].reset_index(drop=True)
 
     def pct(n: int) -> str:
@@ -151,7 +151,8 @@ def categories(cat: pd.DataFrame, total: int) -> go.Figure:
     for o, p in zip(d[OPEN], d[PENDING]):
         parts = ([f"{o} open ({pct(o)})"] if o else []) + ([f"{p} pending ({pct(p)})"] if p else [])
         end.append("<br>".join(parts))
-    return _hbar_status(d, "Category", end, height_per=46, pad=1.6, total=total)
+    return _hbar_status(d, "Category", end, height_per=46, pad=1.6, total=total,
+                        share_of="what's open or pending")
 
 
 def owners(own: pd.DataFrame) -> go.Figure:
