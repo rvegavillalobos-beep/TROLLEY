@@ -11,7 +11,7 @@ import pandas as pd
 import plotly.graph_objects as go
 
 from .data import CLOSED, OPEN, PENDING, SEVERITIES
-from .theme import BAND, BAND_INK, BAND_MUTED, FONT, FONT_COND, INK, RAIL, ROLLER, SEVERITY_DARK, STATUS_LABELS
+from .theme import BAND, BAND_INK, BAND_MUTED, FONT, FONT_COND, INK, HAIR, RAIL, ROLLER, SEVERITY_LIGHT, STATUS_LABELS
 
 NO_STATION = "No station"
 GROUP_GAP = 1.8
@@ -112,8 +112,8 @@ def build(df: pd.DataFrame) -> LineMap:
             fig.add_trace(go.Scatter(
                 x=sub["x"], y=sub["y"], mode="markers", name=f"{sev} ({STATUS_LABELS[status].lower()})",
                 showlegend=False,
-                marker=dict(symbol=symbol, size=12 if status == OPEN else 10.5, color=SEVERITY_DARK[sev],
-                            line=dict(color=BAND if status == OPEN else SEVERITY_DARK[sev],
+                marker=dict(symbol=symbol, size=12 if status == OPEN else 10.5, color=SEVERITY_LIGHT[sev],
+                            line=dict(color=BAND if status == OPEN else SEVERITY_LIGHT[sev],
                                       width=1 if status == OPEN else 2.2)),
                 selected=dict(marker=dict(opacity=1)), unselected=dict(marker=dict(opacity=0.28)),
                 customdata=cd,
@@ -149,7 +149,7 @@ def build(df: pd.DataFrame) -> LineMap:
     fig.update_layout(
         height=height, margin=dict(l=6, r=6, t=8, b=8),
         paper_bgcolor=BAND, plot_bgcolor=BAND, font=dict(family=FONT, color=BAND_INK),
-        hoverlabel=dict(bgcolor="#FFFFFF", bordercolor="#FFFFFF", font=dict(family=FONT, size=13, color=INK), align="left"),
+        hoverlabel=dict(bgcolor="#FFFFFF", bordercolor=HAIR, font=dict(family=FONT, size=13, color=INK), align="left"),
         dragmode="select", bargap=0, showlegend=False,
         xaxis=dict(range=[-0.9, x - 0.1], tickvals=rail_x, ticktext=ticktext, tickangle=-90,
                    tickfont=dict(family=FONT_COND, size=12, color=BAND_INK), showgrid=False, zeroline=False,

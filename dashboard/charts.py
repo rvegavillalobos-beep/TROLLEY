@@ -10,7 +10,13 @@ from .data import CLOSED, CRITICAL, MAJOR, MINOR, OPEN, PENDING, SEVERITIES, UNA
 from .theme import (AXIS, FONT, FOUND, HAIR, HEAT, INK, INK_2, MUTED, PAGE, SEVERITY_LIGHT,
                     SINGLE, STATUS_COLORS, STATUS_LABELS)
 
-CONFIG = {"displayModeBar": False, "displaylogo": False, "responsive": True}
+# Only the camera button: "Download plot as PNG" at 2x, white background, ready for slides.
+CONFIG = {"displayModeBar": "hover", "modeBarButtons": [["toImage"]], "displaylogo": False, "responsive": True,
+          "toImageButtonOptions": {"format": "png", "scale": 2, "filename": "chart"}}
+
+
+def config(name: str) -> dict:
+    return {**CONFIG, "toImageButtonOptions": {**CONFIG["toImageButtonOptions"], "filename": name}}
 
 
 def _axis(**kw) -> dict:
@@ -25,7 +31,7 @@ def style(fig: go.Figure, height: int, legend: bool = True, top: int | None = No
     fig.update_layout(
         height=height,
         margin=dict(l=4, r=24, t=top if top is not None else (40 if legend else 10), b=8),
-        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+        paper_bgcolor="#FFFFFF", plot_bgcolor="#FFFFFF",
         font=dict(family=FONT, size=13, color=INK_2),
         hoverlabel=dict(bgcolor="#FFFFFF", bordercolor=HAIR, font=dict(family=FONT, size=13, color=INK), align="left"),
         showlegend=legend,
@@ -84,7 +90,7 @@ def status_trend(hist: pd.DataFrame, fc: pd.DataFrame | None) -> go.Figure:
                       line=dict(color=MUTED, width=1, dash="dot"))
         fig.add_annotation(x=weeks[len(weeks) // 2], y=1.06, xref="x", yref="paper", text="FORECAST",
                            showarrow=False, font=dict(family=FONT, size=14, color=INK),
-                           bgcolor="rgba(255,255,255,0.9)", bordercolor=MUTED, borderwidth=1, borderpad=5)
+                           bgcolor="#FFFFFF", bordercolor=MUTED, borderwidth=1, borderpad=5)
     style(fig, 450, top=40)
     fig.update_layout(hovermode="x unified",
                       legend=dict(orientation="h", x=0, xanchor="left", y=-0.16, yanchor="top"))

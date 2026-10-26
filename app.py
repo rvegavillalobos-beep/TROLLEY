@@ -180,7 +180,7 @@ def table(frame: pd.DataFrame, height: int | None = None, cols: list[str] | None
 
 
 def plot(fig, key: str):
-    st.plotly_chart(fig, key=key, config=charts.CONFIG, theme=None, width="stretch")
+    st.plotly_chart(fig, key=key, config=charts.config(key), theme=None, width="stretch")
 
 
 def downloads(frame: pd.DataFrame, stem: str, key: str):
@@ -243,7 +243,7 @@ with t_over:
             "rail shows everything logged there.") + theme.linemap_legend())
         lm = linemap.build(df)
         event = st.plotly_chart(lm.figure, key="linemap_chart", on_select="rerun",
-                                selection_mode=("points", "box", "lasso"), config=charts.CONFIG,
+                                selection_mode=("points", "box", "lasso"), config=charts.config("line_map"),
                                 theme=None, width="stretch")
     picked = linemap.selected_ids(event, lm, df)
     if picked:

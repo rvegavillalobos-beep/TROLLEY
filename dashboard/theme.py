@@ -14,7 +14,7 @@ import html
 from .data import CLOSED, CRITICAL, MAJOR, MINOR, OPEN, PENDING, UNASSIGNED
 
 # --- surfaces & ink ---------------------------------------------------------
-PAGE = "#F3F3F0"
+PAGE = "#FFFFFF"  # pure white: charts and panels paste cleanly into slides
 PANEL = "#E8E9E5"
 INK = "#1B2024"
 INK_2 = "#4D555C"
@@ -23,11 +23,11 @@ HAIR = "#D9DAD5"
 AXIS = "#BFC2BC"
 
 # --- the line map band ------------------------------------------------------
-BAND = "#20262B"
-BAND_INK = "#C3CACF"
-BAND_MUTED = "#76808A"
-RAIL = "#323A41"
-ROLLER = "#4A535B"
+BAND = "#FFFFFF"
+BAND_INK = "#4D555C"
+BAND_MUTED = "#A3A8AC"
+RAIL = "#E4E6E2"
+ROLLER = "#C9CDC8"
 
 # --- status (state) ---------------------------------------------------------
 # Red / amber / green: the format management already reads in the weekly slides.
@@ -37,12 +37,11 @@ STATUS_LABELS = {OPEN: "Open", PENDING: "Confirmation pending", CLOSED: "Closed"
 
 # --- severity (ordered: caution → warning → danger) -------------------------
 SEVERITY_LIGHT = {CRITICAL: "#962028", MAJOR: "#CC5418", MINOR: "#D6A934", UNASSIGNED: "#A9AEB2"}
-SEVERITY_DARK = {CRITICAL: "#E5484D", MAJOR: "#F08F35", MINOR: "#F7D66A", UNASSIGNED: "#7E878E"}
 
 # --- other series -----------------------------------------------------------
 FOUND = "#4D555C"
 SINGLE = "#3E5C76"  # one-series bars (steel blue)
-HEAT = ["#F3F3F0", "#F1D9CB", "#E5AE92", "#D27D5A", "#AE4F31", "#7A2A17"]
+HEAT = ["#FBEEE7", "#F1D9CB", "#E5AE92", "#D27D5A", "#AE4F31", "#7A2A17"]
 
 FONT = "Barlow, 'Barlow', 'Segoe UI', system-ui, sans-serif"
 FONT_COND = "'Barlow Condensed', Barlow, 'Arial Narrow', system-ui, sans-serif"
@@ -134,9 +133,7 @@ h1, h2, h3, h4 {{ font-family: {FONT_COND} !important; letter-spacing: 0.005em; 
 .foot {{ color:var(--muted); font-size:0.85rem; margin-top:-0.4rem; line-height:1.4; }}
 
 /* The line map band */
-.st-key-linemap {{ background:var(--band); border-radius:6px; padding:1.2rem 1.4rem 0.4rem; }}
-.st-key-linemap .sec h3 {{ color:#F2F4F5; }}
-.st-key-linemap .sec p {{ color:var(--band-ink); }}
+.st-key-linemap {{ background:#FFFFFF; }}
 .lm-legend {{ display:flex; gap:1.3rem; flex-wrap:wrap; font-size:0.88rem; color:var(--band-ink); margin-top:0.7rem; }}
 .lm-legend i {{ display:inline-block; width:11px; height:11px; border-radius:2px; margin-right:0.4rem; vertical-align:-1px; }}
 
@@ -210,9 +207,9 @@ def facts(items: list[tuple[str, str, str]]) -> str:
 
 def linemap_legend() -> str:
     items = "".join(
-        f'<span><i style="background:{SEVERITY_DARK[s]}"></i>{s}</span>' for s in (CRITICAL, MAJOR, MINOR, UNASSIGNED)
+        f'<span><i style="background:{SEVERITY_LIGHT[s]}"></i>{s}</span>' for s in (CRITICAL, MAJOR, MINOR, UNASSIGNED)
     )
-    items += f'<span><i style="background:transparent;box-shadow:inset 0 0 0 2px {BAND_INK}"></i>Outlined: confirmation pending</span>'
+    items += f'<span><i style="background:transparent;box-shadow:inset 0 0 0 2px {INK_2}"></i>Outlined: confirmation pending</span>'
     return f'<div class="lm-legend">{items}</div>'
 
 
