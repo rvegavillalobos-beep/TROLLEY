@@ -112,9 +112,10 @@ def weekly_status(df: pd.DataFrame, today: pd.Timestamp) -> pd.DataFrame:
     """Weekly snapshot of Closed / Confirmation pending / Open.
 
     One checkpoint per calendar week (Sunday) and today. At each checkpoint an
-    item counts as Closed if it was closed by then; otherwise it counts as
-    Confirmation pending if that is its status today, else Open. So the height
-    of each stack is everything found by that week.
+    item counts as Closed if it was closed by then, as Confirmation pending if
+    its fix was finished by then ('Pending from', from the Fix finished
+    column), and as Open otherwise. So the height of each stack is everything
+    found by that week, and the last checkpoint matches today's statuses.
     """
     today = today.normalize()
     cols = ["Date", "Week", CLOSED, PENDING, OPEN]
@@ -128,15 +129,16 @@ def weekly_status(df: pd.DataFrame, today: pd.Timestamp) -> pd.DataFrame:
 
     opened = d["Date Open"].to_numpy(dtype="datetime64[ns]")
     closed = d["Closed on"].to_numpy(dtype="datetime64[ns]")
-    pending_now = d["Status"].eq(PENDING).to_numpy()
+    pend_from = d["Pending from"].to_numpy(dtype="datetime64[ns]")
     rows = []
     for cp in cps:
         t = np.datetime64(cp, "ns")
         found = opened <= t
         done = found & ~np.isnat(closed) & (closed <= t)
         active = found & ~done
-        rows.append({"Date": cp, CLOSED: int(done.sum()), PENDING: int((active & pending_now).sum()),
-                     OPEN: int((active & ~pending_now).sum())})
+        waiting = active & ~np.isnat(pend_from) & (pend_from <= t)
+        rows.append({"Date": cp, CLOSED: int(done.sum()), PENDING: int(waiting.sum()),
+                     OPEN: int((active & ~waiting).sum())})
     hist = pd.DataFrame(rows)
     hist["Week"] = hist["Date"].map(iso_week_label)
     return hist[cols]

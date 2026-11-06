@@ -112,6 +112,46 @@ def test_trend_pace_ignores_window_edges():
     assert a > 0 and abs(a - b) / a < 0.1
 
 
+def _crafted(with_fix: bool) -> bytes:
+    rows = pd.DataFrame({
+        "Conveyor": ["TR001", "TR002", "TR003"], "Station": ["ST100", "ST200", "ST300"],
+        "Type": ["TR"] * 3, "Category": ["Sensors"] * 3,
+        "Status": ["Closed", "Confirmation pending", "Open"], "Severity": ["Minor"] * 3,
+        "Date Open": pd.to_datetime(["2026-09-01"] * 3),
+        "Date Closed": pd.to_datetime(["2026-10-01", None, None]),
+        "Responsible": ["Maintenance"] * 3, "Comments": ["a", "b", "c"],
+    })
+    if with_fix:
+        rows["Fix finished"] = pd.to_datetime(["2026-09-20", "2026-09-25", None])
+    return _xlsx(rows)
+
+
+def test_fix_finished_drives_pending():
+    d = read_workbook(_crafted(True), TODAY).defects
+    h = metrics.weekly_status(d, TODAY).set_index("Date")
+    at = lambda day: tuple(int(h.loc[pd.Timestamp(day), k]) for k in (CLOSED, PENDING, OPEN))
+    assert at("2026-09-13") == (0, 0, 3)   # nothing fixed yet
+    assert at("2026-09-20") == (0, 1, 2)   # first fix finished
+    assert at("2026-09-27") == (0, 2, 1)   # second fix finished
+    assert at("2026-10-04") == (1, 1, 1)   # first one closed
+    assert at("2026-10-12") == (1, 1, 1)   # today matches the statuses
+    v = d.set_index("Conveyor")["Days in validation"]
+    assert v["TR001"] == 11 and v["TR002"] == 17 and pd.isna(v["TR003"])
+    assert not any(i.key == "fix_column_missing" for i in read_workbook(_crafted(True), TODAY).issues)
+
+
+def test_without_fix_column_pending_since_open():
+    wbx = read_workbook(_crafted(False), TODAY)
+    h = metrics.weekly_status(wbx.defects, TODAY).set_index("Date")
+    assert int(h.loc[pd.Timestamp("2026-09-13"), PENDING]) == 1
+    assert any(i.key == "fix_column_missing" for i in wbx.issues)
+
+
+def test_fix_issues_flagged(wb):
+    keys = {i.key for i in wb.issues}
+    assert "fix_on_open" in keys and "pending_no_fix" in keys
+
+
 def test_by_type(wb):
     t = metrics.by_type(wb.defects)
     assert t["Total"].sum() == len(wb.defects)

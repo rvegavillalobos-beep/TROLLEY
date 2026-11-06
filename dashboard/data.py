@@ -243,6 +243,10 @@ def clean_defects(raw: pd.DataFrame, today: pd.Timestamp) -> tuple[pd.DataFrame,
         if cl else None
     df["Date Open"] = pd.to_datetime(raw["Date Open"], errors="coerce").dt.normalize()
     df["Date Closed"] = pd.to_datetime(raw["Date Closed"], errors="coerce").dt.normalize()
+    # Optional: "Fix finished" = the day the fix was done, i.e. when the item went to Confirmation pending.
+    fx = _fix_finished_col(raw.columns)
+    df["Fix finished"] = (pd.to_datetime(raw[fx], errors="coerce").dt.normalize() if fx
+                          else pd.Series(pd.NaT, index=raw.index, dtype="datetime64[ns]"))
 
     inferred_type = df["Conveyor"].map(_type_from_conveyor)
     df["Type"] = df["Type (raw)"].fillna(inferred_type)
@@ -256,13 +260,83 @@ def clean_defects(raw: pd.DataFrame, today: pd.Timestamp) -> tuple[pd.DataFrame,
     df.loc[df["Days to close"] < 0, "Days to close"] = np.nan
     df["Days open"] = np.where(~is_closed, (today.normalize() - df["Date Open"]).dt.days, np.nan)
     df["Days open"] = pd.to_numeric(df["Days open"], errors="coerce")
+    df["Pending from"] = _pending_from(df, today)
+    has_fix = df["Fix finished"].notna()
+    df["Days in validation"] = np.where(
+        has_fix & df["Status"].eq(PENDING), (today.normalize() - df["Pending from"]).dt.days,
+        np.where(has_fix & is_closed, (df["Closed on"] - df["Pending from"]).dt.days, np.nan))
+    df["Days in validation"] = pd.to_numeric(df["Days in validation"], errors="coerce")
     df["Severity rank"] = df["Severity"].map(SEVERITY_RANK).astype(int)
     df["Week opened"] = df["Date Open"].map(lambda d: iso_week_label(d) if pd.notna(d) else None)
 
-    issues = _defect_issues(df)
+    issues = _defect_issues(df) + _fix_issues(df, has_column=fx is not None)
     df = df.reset_index(drop=True)
     df["id"] = df.index
     return df, issues
+
+
+def _fix_finished_col(cols) -> str | None:
+    """Find the 'Fix finished' column, tolerating spacing, case and a 'date' suffix."""
+    for c in cols:
+        k = re.sub(r"[^a-z]", "", str(c).lower())
+        if "fix" in k and "finish" in k:
+            return c
+    return None
+
+
+def _pending_from(df: pd.DataFrame, today: pd.Timestamp) -> pd.Series:
+    """The day each item started waiting for confirmation (NaT = never, as far as we know).
+
+    - Confirmation pending: its Fix finished date; without one, its open date
+      (the old approximation: pending the whole time).
+    - Closed: its Fix finished date if that falls before the close date;
+      otherwise it counts as open until it was closed.
+    - Open: never. A Fix finished date on an open item can't be placed in time
+      (it may have failed validation and been reopened), so it's ignored.
+    Dates are kept between the open date and today.
+    """
+    fix = df["Fix finished"]
+    status = df["Status"]
+    out = pd.Series(pd.NaT, index=df.index, dtype="datetime64[ns]")
+    pend = status.eq(PENDING)
+    out[pend] = fix[pend].fillna(df.loc[pend, "Date Open"])
+    closed_ok = status.eq(CLOSED) & fix.notna() & (df["Closed on"].isna() | (fix <= df["Closed on"]))
+    out[closed_ok] = fix[closed_ok]
+    early = out.notna() & df["Date Open"].notna() & (out < df["Date Open"])
+    out[early] = df.loc[early, "Date Open"]
+    out[out > today.normalize()] = today.normalize()
+    return out
+
+
+def _fix_issues(df: pd.DataFrame, has_column: bool) -> list[Issue]:
+    if not has_column:
+        return [Issue("fix_column_missing", "No 'Fix finished' column",
+                      "Without it the weekly trend can't tell when an item moved to Confirmation pending, so it "
+                      "counts today's pending items as pending since they were opened. Add a 'Fix finished' "
+                      "date column to the Data sheet.", "info",
+                      pd.DataFrame({"Excel row": pd.Series(dtype=int)}))]
+    out: list[Issue] = []
+    fix, status = df["Fix finished"], df["Status"]
+
+    def add(key, title, explanation, mask):
+        rows = df.loc[mask]
+        if len(rows):
+            out.append(Issue(key, title, explanation, "fix", _view(rows, ["Fix finished"])))
+
+    add("pending_no_fix", "Confirmation pending without a Fix finished date",
+        "The weekly trend counts these as pending since they were opened. Add the day the fix was finished.",
+        status.eq(PENDING) & fix.isna())
+    add("fix_on_open", "Fix finished on an item that's still Open",
+        "Either the fix failed validation and the item was reopened, or the status wasn't updated. "
+        "The trend counts these as Open.",
+        status.eq(OPEN) & fix.notna())
+    add("fix_after_close", "Fix finished after the close date",
+        "The fix date is ignored, so these count as open until they were closed.",
+        status.eq(CLOSED) & fix.notna() & df["Date Closed"].notna() & (fix > df["Date Closed"]))
+    add("fix_before_open", "Fix finished before the open date",
+        "The trend counts them as pending from the open date.",
+        fix.notna() & df["Date Open"].notna() & (fix < df["Date Open"]))
+    return out
 
 
 def _view(df: pd.DataFrame, extra: list[str] | None = None) -> pd.DataFrame:

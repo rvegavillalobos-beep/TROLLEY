@@ -160,6 +160,9 @@ COLUMN_CONFIG = {
     "Days open": st.column_config.NumberColumn("Days open", format="%d", width="small"),
     "Date Open": st.column_config.DateColumn("Opened", format="D MMM YYYY"),
     "Date Closed": st.column_config.DateColumn("Closed", format="D MMM YYYY"),
+    "Fix finished": st.column_config.DateColumn("Fix finished", format="D MMM YYYY"),
+    "Days in validation": st.column_config.NumberColumn("Days in validation", format="%d", width="small",
+                                                        help="From Fix finished to closed, or to today if still pending"),
     "Comments": st.column_config.TextColumn("Comments", width="large"),
 }
 
@@ -417,9 +420,11 @@ with t_health:
         st.html(theme.lead("The workbook is clean.", "No rows need a correction."))
     st.write("")
     for issue in fix_checks + info_checks:
-        with st.expander(f"{issue.title} ({issue.count})", icon=(":material/edit:" if issue.action == "fix"
-                                                                   else ":material/auto_fix_high:")):
+        label = f"{issue.title} ({issue.count})" if issue.count else issue.title
+        with st.expander(label, icon=(":material/edit:" if issue.action == "fix" else ":material/auto_fix_high:")):
             st.html(f'<div class="dh-row">{theme.tag(issue.action)}<span>{theme.esc(issue.explanation)}</span></div>')
+            if not issue.count:
+                continue
             st.dataframe(blank_text(issue.rows), hide_index=True, width="stretch",
                          column_config={**COLUMN_CONFIG,
                                         "Excel row": st.column_config.NumberColumn("Excel row", format="%d",
@@ -440,5 +445,8 @@ with t_records:
         rec = df[hay.str.contains(q, case=False, regex=False)]
     st.caption(f"{len(rec)} of {len(df)} rows")
     cols = DISPLAY_COLS + ["Type", "Responsible"]
+    if df["Fix finished"].notna().any():
+        cols = cols[:cols.index("Date Closed")] + ["Fix finished"] + cols[cols.index("Date Closed"):] \
+            + ["Days in validation"]
     table(rec, height=600, cols=cols)
     downloads(rec[[c for c in cols if c in rec.columns]], "defects", "rec")

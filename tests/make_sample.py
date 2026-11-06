@@ -69,6 +69,20 @@ def build(n: int = 160, seed: int = SEED) -> tuple[pd.DataFrame, pd.DataFrame]:
     data.loc[8, ["Status", "Date Closed"]] = ["Closed", None]
     data.loc[9, "Date Open"] = None
 
+    # Fix finished: the day the fix was done and the item went to Confirmation pending
+    fix = []
+    for r in data.itertuples(index=False):
+        opened, closed = r[data.columns.get_loc("Date Open")], r[data.columns.get_loc("Date Closed")]
+        status = r[data.columns.get_loc("Status")]
+        if pd.isna(opened) or status == "Open" or rng.random() < 0.2:
+            fix.append(None)
+            continue
+        end = closed if status == "Closed" and pd.notna(closed) else ANCHOR + pd.Timedelta(days=95)
+        span = max((pd.Timestamp(end) - pd.Timestamp(opened)).days, 0)
+        fix.append(pd.Timestamp(opened) + pd.Timedelta(days=int(rng.integers(0, span + 1))))
+    data["Fix finished"] = fix
+    data.loc[data.index[data["Status"].eq("Open")][0], "Fix finished"] = ANCHOR + pd.Timedelta(days=60)
+
     # campaign sheet: a snapshot of some transition / stop faults, plus one that isn't tracked
     camp_src = data[data["Category"].isin(["Transition", "Mechanical stop", "Indexing", "Other"])
                     & data["Comments"].notna()].drop_duplicates("Comments").head(24)
